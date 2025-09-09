@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Rack Builder</title>
+    <style>
+      :root {
+        --bg: #0b0c0f;
+        --panel: #141622;
+        --muted: #8b90a6;
+        --text: #e8ebf2;
+        --accent: #6aa9ff;
+        --ring: #2b3e6b;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell;
+      }
+      .wrap {
+        max-width: 1100px;
+        margin: 28px auto;
+        padding: 0 16px;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 12px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 16px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid #1e2233;
+        border-radius: 12px;
+        padding: 14px;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .dropzone {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 220px;
+        border: 2px dashed #2b314a;
+        border-radius: 12px;
+        background: #101325;
+        text-align: center;
+        padding: 12px;
+        user-select: none;
+      }
+      .dropzone.drag {
+        border-color: var(--accent);
+        background: #0e1a33;
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+        align-items: center;
+      }
+      input[type="number"],
+      select {
+        background: #0f1220;
+        color: var(--text);
+        border: 1px solid #252a41;
+        border-radius: 8px;
+        padding: 8px 10px;
+        min-width: 0;
+      }
+      button {
+        background: #1a2b4d;
+        color: var(--text);
+        border: 1px solid var(--ring);
+        border-radius: 8px;
+        padding: 8px 12px;
+        cursor: pointer;
+      }
+      button[disabled] {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      canvas {
+        max-width: 100%;
+        background: #0b0c0f;
+        border-radius: 8px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        font-size: 12px;
+        color: #b5bad0;
+      }
+
+      /* Rack builder UI */
+      .rack {
+        max-height: 160px;
+        margin-top: 10px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 6px;
+        border-bottom: 1px dashed #2b314a;
+      }
+      .tile {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #252a41;
+        background: #0e1222;
+        border-radius: 10px;
+        padding: 6px;
+        user-select: none;
+      }
+      .tile[draggable="true"] {
+        cursor: grab;
+      }
+      .tile:active {
+        cursor: grabbing;
+      }
+      .tile canvas {
+        display: block;
+        max-height: 120px;
+        max-width: 240px;
+      }
+      .tile .tools {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        display: flex;
+        gap: 4px;
+        flex-direction: column;
+        z-index: 2;
+      }
+      .tile .btn {
+        width: 28px; /* fixed square buttons */
+        height: 28px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+        background: #0f1a32;
+        border: 1px solid #2b3e6b;
+        color: #cfd6ee;
+        border-radius: 6px;
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+      }
+      .rack-ctrls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
+
+      .error {
+        color: #ff7a7a;
+      }
+      .ok {
+        color: #7af0a8;
+      }
+      .insert-marker {
+        width: 6px;
+        background: var(--accent);
+        border-radius: 3px;
+        margin: 0 2px;
+        height: 100px;
+        align-self: stretch;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Rack Builder</h1>
+
+      <div class="grid">
+        <div class="card">
+          <div id="dropzone" class="dropzone" aria-label="Drop image here">
+            <div>
+              <div><strong>Drag an image here</strong></div>
+              <div class="hint">
+                Also supports pasting an image (Ctrl/Cmd+V). Each image is
+                auto-cropped and added as a tile.
+              </div>
+            </div>
+          </div>
+
+          <div class="controls">
+            <label
+              >Margin px
+              <input
+                id="marginInput"
+                type="number"
+                value="5"
+                min="0"
+                max="200"
+                step="1"
+            /></label>
+            <label
+              >White tolerance
+              <input
+                id="tolInput"
+                type="number"
+                value="10"
+                min="0"
+                max="60"
+                step="1"
+            /></label>
+          </div>
+
+          <div id="status" class="hint" role="status"></div>
+          <div class="kv" id="meta"></div>
+
+          <div class="rack-ctrls">
+            <strong>Rack builder</strong>
+            <label
+              >Spacing
+              <input
+                id="rackSpacing"
+                type="number"
+                value="0"
+                min="0"
+                max="200"
+                step="1"
+            /></label>
+            <label
+              >Background
+              <select id="rackBg">
+                <option value="transparent">transparent</option>
+                <option value="#ffffff" selected>white</option>
+                <option value="#000000">black</option>
+                <option value="#f5f7fb">light</option>
+              </select>
+            </label>
+            <label
+              >Vertical align
+              <select id="rackValign">
+                <option value="top">top</option>
+                <option value="middle" selected>middle</option>
+                <option value="bottom">bottom</option>
+                <option value="baseline">baseline</option>
+              </select>
+            </label>
+            <button id="buildRackBtn" type="button">Build Combined</button>
+            <button id="clearRackBtn" type="button">Clear</button>
+          </div>
+
+          <div id="rack" class="rack" aria-label="Rack tiles"></div>
+        </div>
+
+        <div class="card">
+          <div class="row">
+            <button id="copyRackBtn" type="button" disabled>
+              Copy combined to clipboard
+            </button>
+            <button id="downloadRackBtn" type="button" disabled>
+              Download combined PNG
+            </button>
+          </div>
+          <div class="hint" style="margin-top: 8px">Combined output</div>
+          <canvas
+            id="rackCanvas"
+            width="0"
+            height="0"
+            aria-label="Combined output"
+          ></canvas>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (() => {
+        "use strict";
+
+        // ---- Auto-crop on white ----
+        class AutoCropper {
+          static computeBounds(src, whiteTol = 10) {
+            const w = src.width,
+              h = src.height;
+            const c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            const g = c.getContext("2d", { willReadFrequently: true });
+            g.drawImage(src, 0, 0);
+
+            let data;
+            try {
+              data = g.getImageData(0, 0, w, h).data;
+            } catch {
+              return { x: 0, y: 0, w, h, tainted: true };
+            }
+
+            const isNonWhite = (r, g, b, a) => {
+              if (a < 10) return false;
+              const dr = 255 - r,
+                dg = 255 - g,
+                db = 255 - b;
+              return Math.max(dr, dg, db) > whiteTol;
+            };
+
+            let minX = w,
+              minY = h,
+              maxX = -1,
+              maxY = -1;
+            for (let y = 0; y < h; y++) {
+              let rowHas = false;
+              const rowStart = y * w * 4;
+              for (let x = 0; x < w; x++) {
+                const i = rowStart + x * 4;
+                if (
+                  isNonWhite(data[i], data[i + 1], data[i + 2], data[i + 3])
+                ) {
+                  rowHas = true;
+                  if (x < minX) minX = x;
+                  if (x > maxX) maxX = x;
+                }
+              }
+              if (rowHas) {
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+              }
+            }
+
+            if (maxX < 0 || maxY < 0)
+              return { x: 0, y: 0, w, h, tainted: false };
+            return {
+              x: minX,
+              y: minY,
+              w: maxX - minX + 1,
+              h: maxY - minY + 1,
+              tainted: false,
+            };
+          }
+
+          static cropWithMargin(src, box, margin = 5) {
+            const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
+            const sw = src.width,
+              sh = src.height;
+            const x = clamp(box.x - margin, 0, sw - 1);
+            const y = clamp(box.y - margin, 0, sh - 1);
+            const r = clamp(box.x + box.w + margin, 0, sw);
+            const b = clamp(box.y + box.h + margin, 0, sh);
+            const w = Math.max(1, r - x);
+            const h = Math.max(1, b - y);
+
+            const out = document.createElement("canvas");
+            out.width = w;
+            out.height = h;
+            out.getContext("2d").drawImage(src, x, y, w, h, 0, 0, w, h);
+            return out;
+          }
+        }
+
+        // ---- Rack state + rendering ----
+        class Rack {
+          constructor(listEl, onChange, onExternalInsert) {
+            this.listEl = listEl;
+            this.onChange = onChange;
+            this.onExternalInsert = onExternalInsert; // NEW
+            this.items = [];
+            this.drag = { fromIndex: -1, markerEl: null };
+            this.installDnD();
+          }
+
+          insertAt(canvas, index) {
+            const id =
+              crypto.randomUUID?.() || String(Date.now() + Math.random());
+            const item = { id, canvas, w: canvas.width, h: canvas.height };
+            this.items.splice(index, 0, item);
+            this.render();
+            this.onChange?.();
+          }
+
+          duplicateAt(index) {
+            const it = this.items[index];
+            if (!it) return;
+            // Clone the canvas content
+            const dup = document.createElement("canvas");
+            dup.width = it.w;
+            dup.height = it.h;
+            dup.getContext("2d").drawImage(it.canvas, 0, 0);
+            this.insertAt(dup, Math.max(0, index)); // insert to the left
+          }
+
+          addCanvas(canvas) {
+            const id =
+              crypto.randomUUID?.() || String(Date.now() + Math.random());
+            this.items.push({ id, canvas, w: canvas.width, h: canvas.height });
+            this.render();
+            this.onChange?.();
+          }
+          clear() {
+            this.items = [];
+            this.render();
+            this.onChange?.();
+          }
+          removeById(id) {
+            this.items = this.items.filter((it) => it.id !== id);
+            this.render();
+            this.onChange?.();
+          }
+          move(fromIndex, toIndex) {
+            if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+            const [it] = this.items.splice(fromIndex, 1);
+            this.items.splice(toIndex, 0, it);
+            this.render();
+            this.onChange?.();
+          }
+
+          render() {
+            this.listEl.innerHTML = "";
+            if (!this.items.length) return;
+            this.items.forEach((it, idx) => {
+              const tile = document.createElement("div");
+              tile.className = "tile";
+              tile.draggable = true;
+              tile.dataset.id = it.id;
+              tile.dataset.index = String(idx);
+
+              const thumb = document.createElement("canvas");
+              thumb.width = it.w;
+              thumb.height = it.h;
+              thumb.getContext("2d").drawImage(it.canvas, 0, 0);
+              tile.appendChild(thumb);
+
+              const tools = document.createElement("div");
+              tools.className = "tools";
+
+              // Copy-left
+              const copyL = document.createElement("button");
+              copyL.className = "btn";
+              copyL.type = "button";
+              copyL.title = "Copy to left";
+              copyL.textContent = "⧉";
+              copyL.addEventListener("click", () => this.duplicateAt(idx));
+              tools.appendChild(copyL);
+
+              // Delete
+              const del = document.createElement("button");
+              del.className = "btn";
+              del.type = "button";
+              del.title = "Remove";
+              del.textContent = "✖";
+              del.addEventListener("click", () => this.removeById(it.id));
+              tools.appendChild(del);
+
+              tile.appendChild(tools);
+
+              this.listEl.appendChild(tile);
+            });
+          }
+
+          installDnD() {
+            const DEAD = 12;
+            let lastTarget = null,
+              lastSide = null;
+
+            this.listEl.addEventListener("dragstart", (e) => {
+              const t = e.target.closest?.(".tile");
+              if (!t) return;
+              this.drag.fromIndex = Number(t.dataset.index);
+              e.dataTransfer.effectAllowed = "move";
+              lastTarget = null;
+              lastSide = null;
+            });
+
+            this.listEl.addEventListener("dragover", (e) => {
+              e.preventDefault();
+              const dt = e.dataTransfer;
+              const isExternal =
+                dt &&
+                (dt.types?.includes("Files") ||
+                  dt.types?.includes("text/uri-list"));
+              dt.dropEffect = isExternal ? "copy" : "move";
+
+              const over =
+                (e.target.closest && e.target.closest(".tile")) || null;
+              this.ensureMarker();
+
+              if (!over) {
+                if (
+                  this.drag.markerEl.parentNode !== this.listEl ||
+                  this.listEl.lastElementChild !== this.drag.markerEl
+                ) {
+                  this.listEl.appendChild(this.drag.markerEl);
+                  lastTarget = null;
+                  lastSide = "end";
+                }
+                return;
+              }
+
+              const rect = over.getBoundingClientRect();
+              const mid = rect.left + rect.width / 2;
+              const x = e.clientX;
+              let side = lastSide;
+
+              if (lastTarget !== over) side = x < mid ? "left" : "right";
+              else {
+                if (side === "left" && x > mid + DEAD) side = "right";
+                else if (side === "right" && x < mid - DEAD) side = "left";
+                else if (!side) side = x < mid ? "left" : "right";
+              }
+
+              if (lastTarget === over && lastSide === side) return;
+              if (side === "left")
+                this.listEl.insertBefore(this.drag.markerEl, over);
+              else
+                this.listEl.insertBefore(this.drag.markerEl, over.nextSibling);
+              lastTarget = over;
+              lastSide = side;
+            });
+
+            this.listEl.addEventListener("drop", (e) => {
+              e.preventDefault();
+              const marker = this.drag.markerEl;
+              if (!marker) return;
+
+              const dt = e.dataTransfer;
+              const isExternal =
+                dt &&
+                (dt.types?.includes("Files") ||
+                  dt.types?.includes("text/uri-list"));
+              const to = this.computeTargetIndex(marker);
+
+              if (isExternal) {
+                this.onExternalInsert?.(e, to); // NEW: let App handle decoding/cropping
+                this.clearMarker();
+                this.drag.fromIndex = -1;
+                return;
+              }
+
+              // Internal reorder
+              const from = this.drag.fromIndex;
+              let insertTo = to;
+              if (insertTo > from) insertTo -= 1;
+              this.move(from, insertTo);
+
+              this.clearMarker();
+              this.drag.fromIndex = -1;
+            });
+
+            this.listEl.addEventListener("dragend", () => {
+              this.clearMarker();
+            });
+            this.listEl.addEventListener("dragleave", (e) => {
+              if (e.relatedTarget && this.listEl.contains(e.relatedTarget))
+                return;
+              // keep marker; flicker-free
+            });
+          }
+
+          ensureMarker() {
+            if (!this.drag.markerEl)
+              (this.drag.markerEl = document.createElement("div")),
+                (this.drag.markerEl.className = "insert-marker");
+          }
+          placeMarker(overTile, side) {
+            const m = this.drag.markerEl;
+            if (!m) return;
+            if (side === "end" || !overTile) {
+              this.listEl.appendChild(m);
+              return;
+            }
+            if (side === "left") this.listEl.insertBefore(m, overTile);
+            else this.listEl.insertBefore(m, overTile.nextSibling);
+          }
+          clearMarker() {
+            if (this.drag.markerEl?.parentNode)
+              this.drag.markerEl.parentNode.removeChild(this.drag.markerEl);
+            this.drag.markerEl = null;
+          }
+          computeTargetIndex(marker) {
+            const idx = Array.from(this.listEl.children).indexOf(marker);
+            return idx < 0 ? this.items.length : idx;
+          }
+
+          buildCombined({ spacing = 0, bg = "white", valign = "middle" } = {}) {
+            if (!this.items.length) return null;
+            const heights = this.items.map((it) => it.h);
+            const maxH = Math.max(...heights);
+            const totalW =
+              this.items.reduce((acc, it) => acc + it.w, 0) +
+              spacing * (this.items.length - 1);
+            const out = document.createElement("canvas");
+            out.width = totalW;
+            out.height = maxH;
+            const g = out.getContext("2d");
+            if (bg !== "transparent") {
+              g.fillStyle = bg;
+              g.fillRect(0, 0, out.width, out.height);
+            } else {
+              g.clearRect(0, 0, out.width, out.height);
+            }
+            let x = 0;
+            for (const it of this.items) {
+              let y = 0;
+              if (valign === "middle") y = Math.round((maxH - it.h) / 2);
+              else if (valign === "bottom" || valign === "baseline")
+                y = maxH - it.h;
+              g.drawImage(it.canvas, x, y);
+              x += it.w + spacing;
+            }
+            return out;
+          }
+        }
+
+        // ---- App wiring ----
+        class App {
+          constructor() {
+            this.el = {
+              dropzone: document.getElementById("dropzone"),
+              marginInput: document.getElementById("marginInput"),
+              tolInput: document.getElementById("tolInput"),
+              status: document.getElementById("status"),
+              meta: document.getElementById("meta"),
+              rack: document.getElementById("rack"),
+              rackSpacing: document.getElementById("rackSpacing"),
+              rackBg: document.getElementById("rackBg"),
+              rackValign: document.getElementById("rackValign"),
+              buildRackBtn: document.getElementById("buildRackBtn"),
+              clearRackBtn: document.getElementById("clearRackBtn"),
+              rackCanvas: document.getElementById("rackCanvas"),
+              copyRackBtn: document.getElementById("copyRackBtn"),
+              downloadRackBtn: document.getElementById("downloadRackBtn"),
+            };
+
+            this.sourceBitmap = null;
+            this.lastObjectUrl = null;
+
+            // this.rack = new Rack(this.el.rack, () => this.buildRack());
+
+            this.rack = new Rack(
+              this.el.rack,
+              () => this.buildRack(),
+              (e, index) => this.handleExternalInsert(e, index) // NEW
+            );
+
+            this.bindEvents();
+            this.bindGlobalPaste();
+            this.loadSettings();
+            this.setStatus(
+              "Ready. Drag/paste images. Tiles auto-crop and rack rebuilds.",
+              "ok"
+            );
+          }
+
+          // Settings
+          loadSettings() {
+            try {
+              const s = JSON.parse(
+                localStorage.getItem("autocrop-settings") || "{}"
+              );
+              if (s.margin != null) this.el.marginInput.value = s.margin;
+              if (s.tol != null) this.el.tolInput.value = s.tol;
+              if (s.rackSpacing != null)
+                this.el.rackSpacing.value = s.rackSpacing;
+              if (s.rackBg) this.el.rackBg.value = s.rackBg;
+              if (s.rackValign) this.el.rackValign.value = s.rackValign;
+            } catch {}
+          }
+          saveSettings() {
+            const s = {
+              margin: this.el.marginInput.value,
+              tol: this.el.tolInput.value,
+              rackSpacing: this.el.rackSpacing.value,
+              rackBg: this.el.rackBg.value,
+              rackValign: this.el.rackValign.value,
+            };
+            localStorage.setItem("autocrop-settings", JSON.stringify(s));
+          }
+
+          // Events
+          bindEvents() {
+            const dz = this.el.dropzone;
+            ["dragenter", "dragover"].forEach((evt) =>
+              dz.addEventListener(evt, (e) => {
+                e.preventDefault();
+                dz.classList.add("drag");
+              })
+            );
+            ["dragleave", "drop"].forEach((evt) =>
+              dz.addEventListener(evt, (e) => {
+                e.preventDefault();
+                dz.classList.remove("drag");
+              })
+            );
+            dz.addEventListener("drop", (e) => this.handleDrop(e));
+
+            this.el.marginInput.addEventListener("change", () => {
+              this.saveSettings();
+              this.setStatus("Margin updated. New images will use it.", "ok");
+            });
+            this.el.tolInput.addEventListener("change", () => {
+              this.saveSettings();
+              this.setStatus(
+                "Tolerance updated. New images will use it.",
+                "ok"
+              );
+            });
+
+            this.el.rackSpacing.addEventListener("change", () => {
+              this.saveSettings();
+              this.buildRack();
+            });
+            this.el.rackBg.addEventListener("change", () => {
+              this.saveSettings();
+              this.buildRack();
+            });
+            this.el.rackValign.addEventListener("change", () => {
+              this.saveSettings();
+              this.buildRack();
+            });
+
+            this.el.buildRackBtn.addEventListener("click", () =>
+              this.buildRack()
+            );
+            this.el.clearRackBtn.addEventListener("click", () => {
+              this.rack.clear();
+              this.updateRackButtonsState();
+            });
+            this.el.copyRackBtn.addEventListener("click", () =>
+              this.copyCanvas(this.el.rackCanvas)
+            );
+            this.el.downloadRackBtn.addEventListener("click", () =>
+              this.downloadCanvas(this.el.rackCanvas, "rack.png")
+            );
+          }
+
+          bindGlobalPaste() {
+            window.addEventListener("paste", async (e) => {
+              const items = Array.from(e.clipboardData?.items || []);
+              const imgItem = items.find((i) => i.type.startsWith("image/"));
+              if (!imgItem) return; // ignore URL/text paste
+              e.preventDefault();
+              const blob = imgItem.getAsFile();
+              if (blob) {
+                this.setStatus("Pasted image.", "ok");
+                await this.loadFromBlob(blob, { alsoAddToRack: true });
+              }
+            });
+          }
+
+          // Loading
+          async handleDrop(e) {
+            const dt = e.dataTransfer;
+            if (dt.files && dt.files.length) {
+              this.loadFromFile(dt.files[0], { alsoAddToRack: true });
+              return;
+            }
+            const url = dt.getData("text/uri-list") || dt.getData("text/plain");
+            if (url && /^https?:\/\//i.test(url)) {
+              // Dragged from web page. Try CORS fetch; otherwise advise to paste or save-and-drag.
+              try {
+                const bmp = await this.fetchImageAsBitmap(url.trim());
+                await this.setSource(bmp, { alsoAddToRack: true });
+                this.setStatus("Loaded via URL drag.", "ok");
+                return;
+              } catch (err) {
+                this.setStatus(
+                  "Could not read pixels from this URL (CORS). Paste the image or save and drag the file.",
+                  "error"
+                );
+                console.error(err);
+                return;
+              }
+            }
+            this.setStatus(
+              "Unsupported drop payload. Drop an image file or an image URL.",
+              "error"
+            );
+          }
+
+          async fetchImageAsBitmap(url) {
+            const res = await fetch(url, { mode: "cors", credentials: "omit" });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            const blob = await res.blob();
+            return createImageBitmap(blob);
+          }
+          async loadFromFile(file, opts = {}) {
+            if (!file.type.startsWith("image/")) {
+              this.setStatus("File is not an image.", "error");
+              return;
+            }
+            this.setStatus(`Loading ${file.name}…`);
+            await this.loadFromBlob(file, opts);
+          }
+          async loadFromBlob(blob, opts = {}) {
+            if (this.lastObjectUrl) URL.revokeObjectURL(this.lastObjectUrl);
+            this.lastObjectUrl = URL.createObjectURL(blob);
+            try {
+              const bmp = await createImageBitmap(blob);
+              await this.setSource(bmp, opts);
+              this.setStatus("Loaded image.", "ok");
+            } catch (e) {
+              this.setStatus("Failed to decode image.", "error");
+              console.error(e);
+            }
+          }
+
+          async setSource(bitmap, { alsoAddToRack = false } = {}) {
+            this.sourceBitmap = bitmap;
+            const cropped = this.autoCropCurrent(); // returns cropped canvas
+            if (alsoAddToRack && cropped) {
+              this.rack.addCanvas(cropped); // triggers auto build via onChange
+              this.updateRackButtonsState();
+            }
+          }
+
+          autoCropCurrent() {
+            if (!this.sourceBitmap) return null;
+            const tol = this.parseBoundedInt(this.el.tolInput.value, 0, 60, 10);
+            const margin = this.parseBoundedInt(
+              this.el.marginInput.value,
+              0,
+              200,
+              5
+            );
+
+            const b = AutoCropper.computeBounds(this.sourceBitmap, tol);
+            this.el.meta.innerHTML = "";
+            const addMeta = (k, v) => {
+              const kEl = document.createElement("div");
+              kEl.textContent = k;
+              const vEl = document.createElement("div");
+              vEl.textContent = String(v);
+              this.el.meta.append(kEl, vEl);
+            };
+
+            addMeta(
+              "Source",
+              `${this.sourceBitmap.width}×${this.sourceBitmap.height}`
+            );
+            if (b.tainted) {
+              addMeta("Tainted", "yes");
+              this.setStatus(
+                "Cross-origin blocked. Paste or save-and-drag.",
+                "error"
+              );
+              return null;
+            } else addMeta("Tainted", "no");
+
+            addMeta("BBox", `${b.x},${b.y} → ${b.w}×${b.h}`);
+            addMeta("Margin", `${margin}px`);
+            return AutoCropper.cropWithMargin(this.sourceBitmap, b, margin);
+          }
+
+          // Combined build
+          buildRack() {
+            const spacing = this.parseBoundedInt(
+              this.el.rackSpacing.value,
+              0,
+              200,
+              0
+            );
+            const bg = this.el.rackBg.value || "transparent";
+            const valign = this.el.rackValign.value || "middle";
+            const combined = this.rack.buildCombined({ spacing, bg, valign });
+            if (!combined) {
+              this.el.rackCanvas.width = 0;
+              this.el.rackCanvas.height = 0;
+              this.el.copyRackBtn.disabled = true;
+              this.el.downloadRackBtn.disabled = true;
+              this.setStatus("No tiles to combine.", "error");
+              return;
+            }
+            this.drawToCanvas(this.el.rackCanvas, combined);
+            this.el.copyRackBtn.disabled = false;
+            this.el.downloadRackBtn.disabled = false;
+            this.setStatus(
+              `Built combined image ${combined.width}×${combined.height}.`,
+              "ok"
+            );
+          }
+
+          // Utilities
+          drawToCanvas(canvas, srcCanvas) {
+            canvas.width = srcCanvas.width;
+            canvas.height = srcCanvas.height;
+            const g = canvas.getContext("2d");
+            g.clearRect(0, 0, canvas.width, canvas.height);
+            g.drawImage(srcCanvas, 0, 0);
+          }
+          async copyCanvas(cnv) {
+            try {
+              const blob = await new Promise((res) =>
+                cnv.toBlob(res, "image/png")
+              );
+              if (!blob) throw new Error("toBlob failed");
+              await navigator.clipboard.write([
+                new ClipboardItem({ [blob.type]: blob }),
+              ]);
+              this.setStatus("Copied PNG to clipboard.", "ok");
+            } catch (e) {
+              this.setStatus(
+                "Clipboard copy failed. Your browser may block it in file://. Download instead.",
+                "error"
+              );
+              console.error(e);
+            }
+          }
+          downloadCanvas(cnv, filename) {
+            cnv.toBlob((blob) => {
+              if (!blob) return;
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              setTimeout(() => URL.revokeObjectURL(url), 0);
+            }, "image/png");
+          }
+          updateRackButtonsState() {
+            const has = this.rack.items.length > 0;
+            if (!has) {
+              this.el.rackCanvas.width = 0;
+              this.el.rackCanvas.height = 0;
+              this.el.copyRackBtn.disabled = true;
+              this.el.downloadRackBtn.disabled = true;
+            }
+          }
+          setStatus(text, kind = "hint") {
+            const el = this.el.status;
+            el.textContent = text;
+            el.className =
+              kind === "error" ? "error" : kind === "ok" ? "ok" : "hint";
+          }
+          parseBoundedInt(v, min, max, fallback) {
+            let n = Number.parseInt(v, 10);
+            if (!Number.isFinite(n)) n = fallback;
+            return Math.min(Math.max(n, min), max);
+          }
+
+          getCurrentCropParams() {
+            return {
+              tol: this.parseBoundedInt(this.el.tolInput.value, 0, 60, 10),
+              margin: this.parseBoundedInt(
+                this.el.marginInput.value,
+                0,
+                200,
+                5
+              ),
+            };
+          }
+
+          async cropBitmapToCanvas(bitmap, tol, margin) {
+            const b = AutoCropper.computeBounds(bitmap, tol);
+            if (b.tainted) throw new Error("tainted");
+            return AutoCropper.cropWithMargin(bitmap, b, margin);
+          }
+
+          async handleExternalInsert(e, index) {
+            const dt = e.dataTransfer;
+            const { tol, margin } = this.getCurrentCropParams();
+
+            const finish = (canvas) => {
+              this.rack.insertAt(
+                canvas,
+                Math.max(0, Math.min(index, this.rack.items.length))
+              );
+              this.updateRackButtonsState(); // enables copy/download if needed
+            };
+
+            // Files first
+            if (dt.files && dt.files.length) {
+              const file = Array.from(dt.files).find((f) =>
+                f.type.startsWith("image/")
+              );
+              if (!file) {
+                this.setStatus("Dropped file is not an image.", "error");
+                return;
+              }
+              try {
+                const bmp = await createImageBitmap(file);
+                const cnv = await this.cropBitmapToCanvas(bmp, tol, margin);
+                finish(cnv);
+                this.setStatus("Inserted image at position.", "ok");
+              } catch (err) {
+                this.setStatus("Failed to decode/crop dropped file.", "error");
+                console.error(err);
+              }
+              return;
+            }
+
+            // URL from another page
+            const url = dt.getData("text/uri-list") || dt.getData("text/plain");
+            if (url && /^https?:\/\//i.test(url)) {
+              try {
+                const res = await fetch(url.trim(), {
+                  mode: "cors",
+                  credentials: "omit",
+                });
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                const blob = await res.blob();
+                const bmp = await createImageBitmap(blob);
+                const cnv = await this.cropBitmapToCanvas(bmp, tol, margin);
+                finish(cnv);
+                this.setStatus("Inserted image from URL.", "ok");
+              } catch (err) {
+                this.setStatus(
+                  "Could not read pixels from URL (CORS). Paste or save-and-drag.",
+                  "error"
+                );
+                console.error(err);
+              }
+              return;
+            }
+
+            this.setStatus("Unsupported drop payload.", "error");
+          }
+        }
+
+        new App();
+      })();
+    </script>
+  </body>
+</html>
