@@ -6,6 +6,10 @@ No backend required — everything runs in your browser.
 
 👉 **[Use it live on GitHub Pages](https://benhar-dev.github.io/webtool-rack-builder/)**
 
+## Demo
+
+![image](./docs/images/screenshot.gif)
+
 ## Features
 
 - **Drag & Drop** images directly from your computer or other webpages
