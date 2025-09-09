@@ -378,6 +378,7 @@
             this.onChange = onChange;
             this.onExternalInsert = onExternalInsert; // NEW
             this.items = [];
+            this.normH = 0; // track target height for scaling
             this.drag = { fromIndex: -1, markerEl: null };
             this.installDnD();
           }
@@ -387,6 +388,7 @@
               crypto.randomUUID?.() || String(Date.now() + Math.random());
             const item = { id, canvas, w: canvas.width, h: canvas.height };
             this.items.splice(index, 0, item);
+            this.recalcHeight();
             this.render();
             this.onChange?.();
           }
@@ -406,16 +408,19 @@
             const id =
               crypto.randomUUID?.() || String(Date.now() + Math.random());
             this.items.push({ id, canvas, w: canvas.width, h: canvas.height });
+            this.recalcHeight();
             this.render();
             this.onChange?.();
           }
           clear() {
             this.items = [];
+            this.recalcHeight();
             this.render();
             this.onChange?.();
           }
           removeById(id) {
             this.items = this.items.filter((it) => it.id !== id);
+            this.recalcHeight();
             this.render();
             this.onChange?.();
           }
@@ -423,13 +428,23 @@
             if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
             const [it] = this.items.splice(fromIndex, 1);
             this.items.splice(toIndex, 0, it);
+            // heights unaffected but recompute for safety
+            this.recalcHeight();
             this.render();
             this.onChange?.();
+          }
+
+          recalcHeight() {
+            this.normH = this.items.reduce(
+              (max, it) => (it.h > max ? it.h : max),
+              0
+            );
           }
 
           render() {
             this.listEl.innerHTML = "";
             if (!this.items.length) return;
+            const targetH = this.normH || 0;
             this.items.forEach((it, idx) => {
               const tile = document.createElement("div");
               tile.className = "tile";
@@ -437,10 +452,13 @@
               tile.dataset.id = it.id;
               tile.dataset.index = String(idx);
 
+              const scale = targetH && it.h ? targetH / it.h : 1;
+              const w = Math.round(it.w * scale);
+              const h = Math.round(it.h * scale);
               const thumb = document.createElement("canvas");
-              thumb.width = it.w;
-              thumb.height = it.h;
-              thumb.getContext("2d").drawImage(it.canvas, 0, 0);
+              thumb.width = w;
+              thumb.height = h;
+              thumb.getContext("2d").drawImage(it.canvas, 0, 0, w, h);
               tile.appendChild(thumb);
 
               const tools = document.createElement("div");
@@ -593,17 +611,18 @@
             const idx = Array.from(this.listEl.children).indexOf(marker);
             return idx < 0 ? this.items.length : idx;
           }
-
           buildCombined({ spacing = 0, bg = "white", valign = "middle" } = {}) {
             if (!this.items.length) return null;
-            const heights = this.items.map((it) => it.h);
-            const maxH = Math.max(...heights);
+            const targetH = this.normH || 0;
             const totalW =
-              this.items.reduce((acc, it) => acc + it.w, 0) +
+              this.items.reduce(
+                (acc, it) => acc + Math.round((it.w * targetH) / it.h),
+                0
+              ) +
               spacing * (this.items.length - 1);
             const out = document.createElement("canvas");
             out.width = totalW;
-            out.height = maxH;
+            out.height = targetH;
             const g = out.getContext("2d");
             if (bg !== "transparent") {
               g.fillStyle = bg;
@@ -613,12 +632,14 @@
             }
             let x = 0;
             for (const it of this.items) {
+              const w = Math.round((it.w * targetH) / it.h);
               let y = 0;
-              if (valign === "middle") y = Math.round((maxH - it.h) / 2);
+              // valign retained for future flexibility, though heights equal
+              if (valign === "middle") y = Math.round((targetH - targetH) / 2);
               else if (valign === "bottom" || valign === "baseline")
-                y = maxH - it.h;
-              g.drawImage(it.canvas, x, y);
-              x += it.w + spacing;
+                y = targetH - targetH;
+              g.drawImage(it.canvas, x, y, w, targetH);
+              x += w + spacing;
             }
             return out;
           }
