@@ -973,6 +973,9 @@
             this.el.downloadRackBtn.addEventListener("click", () =>
               this.downloadCanvas(this.el.rackCanvas, "rack.png")
             );
+            this.el.rackCanvas.addEventListener("click", () =>
+              this.copyCanvas(this.el.rackCanvas)
+            );
           }
 
           bindGlobalPaste() {
