@@ -143,14 +143,26 @@
         min-width: 0;
       }
       button {
-        background: #1a2b4d;
+        background-color: #1a2b4d;
         color: var(--text);
         border: 1px solid var(--ring);
         border-radius: 8px;
         padding: 8px 12px;
         cursor: pointer;
+        transition: background-color 0.18s ease, border-color 0.18s ease,
+          box-shadow 0.18s ease, opacity 0.18s ease, transform 0.12s ease;
       }
-      button[disabled] {
+
+      button:hover:not(:disabled) {
+        background-color: #3b61ad;
+      }
+
+      button:active:not(:disabled) {
+        background-color: #3b61ad;
+        transform: translateY(1px);
+      }
+
+      button:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
@@ -296,6 +308,7 @@
           </div>
 
           <div class="controls">
+            <strong>Drag settings</strong>
             <label
               >Margin px
               <input
@@ -318,54 +331,8 @@
             /></label>
           </div>
 
-          <div id="status" class="hint" role="status"></div>
-          <div class="kv" id="meta"></div>
-
-          <div class="rack-ctrls">
-            <strong>Rack builder</strong>
-            <label
-              >Spacing
-              <input
-                id="rackSpacing"
-                type="number"
-                value="0"
-                min="0"
-                max="200"
-                step="1"
-            /></label>
-            <label
-              >Background
-              <select id="rackBg">
-                <option value="transparent">transparent</option>
-                <option value="#ffffff" selected>white</option>
-                <option value="#000000">black</option>
-                <option value="#f5f7fb">light</option>
-              </select>
-            </label>
-            <label
-              >Vertical align
-              <select id="rackValign">
-                <option value="top">top</option>
-                <option value="middle" selected>middle</option>
-                <option value="bottom">bottom</option>
-                <option value="baseline">baseline</option>
-              </select>
-            </label>
-            <label
-              >Scale %
-              <input
-                id="rackScale"
-                type="number"
-                value="100"
-                min="1"
-                max="400"
-                step="1"
-            /></label>
-            <button id="buildRackBtn" type="button">Build Combined</button>
-            <button id="clearRackBtn" type="button">Clear</button>
-          </div>
-
           <div id="rack" class="rack" aria-label="Rack tiles"></div>
+          <div id="status" class="hint" role="status"></div>
         </div>
 
         <div class="card">
@@ -376,6 +343,49 @@
             <button id="downloadRackBtn" type="button" disabled>
               Download combined PNG
             </button>
+
+            <div class="rack-ctrls">
+              <strong>Rack settings</strong>
+              <label
+                >Spacing
+                <input
+                  id="rackSpacing"
+                  type="number"
+                  value="0"
+                  min="0"
+                  max="200"
+                  step="1"
+              /></label>
+              <label
+                >Background
+                <select id="rackBg">
+                  <option value="transparent">transparent</option>
+                  <option value="#ffffff" selected>white</option>
+                  <option value="#000000">black</option>
+                  <option value="#f5f7fb">light</option>
+                </select>
+              </label>
+              <label
+                >Vertical align
+                <select id="rackValign">
+                  <option value="top">top</option>
+                  <option value="middle" selected>middle</option>
+                  <option value="bottom">bottom</option>
+                  <option value="baseline">baseline</option>
+                </select>
+              </label>
+              <label
+                >Scale %
+                <input
+                  id="rackScale"
+                  type="number"
+                  value="100"
+                  min="1"
+                  max="400"
+                  step="1"
+              /></label>
+              <button id="clearRackBtn" type="button">Clear</button>
+            </div>
           </div>
           <div class="hint" style="margin-top: 8px">Combined output</div>
           <canvas
@@ -394,7 +404,11 @@
         {
           version: "0.3.0",
           date: "2025-09-10",
-          items: ["Added Scale % control to resize the combined output."],
+          items: [
+            "Added Scale % control to resize the combined output.",
+            "Added button feedback.",
+            "Simplified UI.",
+          ],
         },
         {
           version: "0.2.0",
@@ -816,13 +830,11 @@
               marginInput: document.getElementById("marginInput"),
               tolInput: document.getElementById("tolInput"),
               status: document.getElementById("status"),
-              meta: document.getElementById("meta"),
               rack: document.getElementById("rack"),
               rackSpacing: document.getElementById("rackSpacing"),
               rackBg: document.getElementById("rackBg"),
               rackValign: document.getElementById("rackValign"),
               rackScale: document.getElementById("rackScale"),
-              buildRackBtn: document.getElementById("buildRackBtn"),
               clearRackBtn: document.getElementById("clearRackBtn"),
               rackCanvas: document.getElementById("rackCanvas"),
               copyRackBtn: document.getElementById("copyRackBtn"),
@@ -922,9 +934,6 @@
               this.buildRack();
             });
 
-            this.el.buildRackBtn.addEventListener("click", () =>
-              this.buildRack()
-            );
             this.el.clearRackBtn.addEventListener("click", () => {
               this.rack.clear();
               this.updateRackButtonsState();
@@ -1028,30 +1037,6 @@
             );
 
             const b = AutoCropper.computeBounds(this.sourceBitmap, tol);
-            this.el.meta.innerHTML = "";
-            const addMeta = (k, v) => {
-              const kEl = document.createElement("div");
-              kEl.textContent = k;
-              const vEl = document.createElement("div");
-              vEl.textContent = String(v);
-              this.el.meta.append(kEl, vEl);
-            };
-
-            addMeta(
-              "Source",
-              `${this.sourceBitmap.width}×${this.sourceBitmap.height}`
-            );
-            if (b.tainted) {
-              addMeta("Tainted", "yes");
-              this.setStatus(
-                "Cross-origin blocked. Paste or save-and-drag.",
-                "error"
-              );
-              return null;
-            } else addMeta("Tainted", "no");
-
-            addMeta("BBox", `${b.x},${b.y} → ${b.w}×${b.h}`);
-            addMeta("Margin", `${margin}px`);
             return AutoCropper.cropWithMargin(this.sourceBitmap, b, margin);
           }
 
@@ -1078,6 +1063,7 @@
               this.el.copyRackBtn.disabled = true;
               this.el.downloadRackBtn.disabled = true;
               this.setStatus("No tiles to combine.", "error");
+              this.updateRackButtonsState();
               return;
             }
             let out = combined;
@@ -1092,6 +1078,7 @@
               out = scaled;
             }
             this.drawToCanvas(this.el.rackCanvas, out);
+            this.updateRackButtonsState();
             this.el.copyRackBtn.disabled = false;
             this.el.downloadRackBtn.disabled = false;
             this.setStatus(
@@ -1147,6 +1134,8 @@
               this.el.copyRackBtn.disabled = true;
               this.el.downloadRackBtn.disabled = true;
             }
+            // Enable/disable clear depending on items present
+            this.el.clearRackBtn.disabled = !has;
           }
           setStatus(text, kind = "hint") {
             const el = this.el.status;
@@ -1240,7 +1229,8 @@
         }
 
         initChangelogUI();
-        new App();
+        const app = new App();
+        app.updateRackButtonsState();
       })();
     </script>
   </body>
