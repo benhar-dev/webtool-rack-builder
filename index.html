@@ -261,6 +261,16 @@
                 <option value="baseline">baseline</option>
               </select>
             </label>
+            <label
+              >Scale %
+              <input
+                id="rackScale"
+                type="number"
+                value="100"
+                min="1"
+                max="400"
+                step="1"
+            /></label>
             <button id="buildRackBtn" type="button">Build Combined</button>
             <button id="clearRackBtn" type="button">Clear</button>
           </div>
@@ -658,6 +668,7 @@
               rackSpacing: document.getElementById("rackSpacing"),
               rackBg: document.getElementById("rackBg"),
               rackValign: document.getElementById("rackValign"),
+              rackScale: document.getElementById("rackScale"),
               buildRackBtn: document.getElementById("buildRackBtn"),
               clearRackBtn: document.getElementById("clearRackBtn"),
               rackCanvas: document.getElementById("rackCanvas"),
@@ -697,6 +708,7 @@
                 this.el.rackSpacing.value = s.rackSpacing;
               if (s.rackBg) this.el.rackBg.value = s.rackBg;
               if (s.rackValign) this.el.rackValign.value = s.rackValign;
+              if (s.rackScale != null) this.el.rackScale.value = s.rackScale;
             } catch {}
           }
           saveSettings() {
@@ -706,6 +718,7 @@
               rackSpacing: this.el.rackSpacing.value,
               rackBg: this.el.rackBg.value,
               rackValign: this.el.rackValign.value,
+              rackScale: this.el.rackScale.value,
             };
             localStorage.setItem("autocrop-settings", JSON.stringify(s));
           }
@@ -748,6 +761,10 @@
               this.buildRack();
             });
             this.el.rackValign.addEventListener("change", () => {
+              this.saveSettings();
+              this.buildRack();
+            });
+            this.el.rackScale.addEventListener("change", () => {
               this.saveSettings();
               this.buildRack();
             });
@@ -895,6 +912,12 @@
             );
             const bg = this.el.rackBg.value || "transparent";
             const valign = this.el.rackValign.value || "middle";
+            const scalePct = this.parseBoundedInt(
+              this.el.rackScale.value,
+              1,
+              400,
+              100
+            );
             const combined = this.rack.buildCombined({ spacing, bg, valign });
             if (!combined) {
               this.el.rackCanvas.width = 0;
@@ -904,11 +927,22 @@
               this.setStatus("No tiles to combine.", "error");
               return;
             }
-            this.drawToCanvas(this.el.rackCanvas, combined);
+            let out = combined;
+            if (scalePct !== 100) {
+              const s = scalePct / 100;
+              const scaled = document.createElement("canvas");
+              scaled.width = Math.round(combined.width * s);
+              scaled.height = Math.round(combined.height * s);
+              scaled
+                .getContext("2d")
+                .drawImage(combined, 0, 0, scaled.width, scaled.height);
+              out = scaled;
+            }
+            this.drawToCanvas(this.el.rackCanvas, out);
             this.el.copyRackBtn.disabled = false;
             this.el.downloadRackBtn.disabled = false;
             this.setStatus(
-              `Built combined image ${combined.width}×${combined.height}.`,
+              `Built combined image ${out.width}×${out.height}.`,
               "ok"
             );
           }

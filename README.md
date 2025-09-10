@@ -20,7 +20,7 @@ No backend required — everything runs in your browser.
 - **Delete** button to remove tiles
 - **Reorder** tiles with intuitive drag-and-drop (with insertion markers)
 - **Combined output**: build a single stitched image from all tiles
-- **Customisation**: spacing, background colour, vertical alignment
+- **Customisation**: spacing, background colour, vertical alignment, scale
 - **Copy to clipboard** combined PNG
 - **Download** combined PNG
 - **Settings persistence** via `localStorage`
