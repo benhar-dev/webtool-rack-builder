@@ -29,7 +29,71 @@
       }
       h1 {
         font-size: 18px;
+        margin: 0;
+      }
+      .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
         margin: 0 0 12px;
+      }
+      .version-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #0f1a32;
+        color: var(--text);
+        border: 1px solid #2b3e6b;
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+      }
+      .version-pill.new::after {
+        content: "New";
+        display: inline-block;
+        margin-left: 4px;
+        padding: 2px 6px;
+        font-size: 10px;
+        color: #0b0c0f;
+        background: #7af0a8;
+        border-radius: 999px;
+      }
+      .changelog {
+        margin-bottom: 12px;
+      }
+      .changelog-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .changelog-list {
+        margin-top: 8px;
+      }
+      .changelog .chg-title {
+        color: #cfd6ee;
+        font-size: 13px;
+        margin: 10px 0 6px;
+      }
+      .changelog ul {
+        margin: 0 0 6px 18px;
+        padding: 0;
+      }
+      .changelog li {
+        margin: 4px 0;
+      }
+      .close-btn {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        display: inline-grid;
+        place-items: center;
+        background: #0f1a32;
+        border: 1px solid #2b3e6b;
+        color: #cfd6ee;
+        border-radius: 6px;
+        cursor: pointer;
       }
       .grid {
         display: grid;
@@ -191,7 +255,33 @@
   </head>
   <body>
     <div class="wrap">
-      <h1>Rack Builder</h1>
+      <div class="header">
+        <h1>Rack Builder</h1>
+        <button
+          id="versionBtn"
+          class="version-pill"
+          type="button"
+          title="What's new"
+        >
+          v0.0.0
+        </button>
+      </div>
+
+      <div id="changelogPanel" class="card changelog" hidden aria-live="polite">
+        <div class="changelog-head">
+          <strong>What’s New</strong>
+          <button
+            id="closeChangelogBtn"
+            class="close-btn"
+            type="button"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="hint">Latest updates and recent changes.</div>
+        <div id="changelogList" class="changelog-list"></div>
+      </div>
 
       <div class="grid">
         <div class="card">
@@ -299,6 +389,69 @@
     </div>
 
     <script>
+      const APP_VERSION = "0.3.0";
+      const CHANGELOG = [
+        {
+          version: "0.3.0",
+          date: "2025-09-10",
+          items: ["Added Scale % control to resize the combined output."],
+        },
+        {
+          version: "0.2.0",
+          date: "2025-09-09",
+          items: ["Fixed scaling issues with very tall/short images."],
+        },
+        {
+          version: "0.1.0",
+          date: "2025-09-09",
+          items: [
+            "Converted personal tool to github friendly one page tool for sharing.",
+          ],
+        },
+      ];
+
+      function initChangelogUI() {
+        const btn = document.getElementById("versionBtn");
+        const panel = document.getElementById("changelogPanel");
+        const list = document.getElementById("changelogList");
+        const closeBtn = document.getElementById("closeChangelogBtn");
+        const seenKey = "seen-version";
+
+        // Set version label and "new" badge if not seen
+        btn.textContent = "v" + APP_VERSION;
+        const seen = localStorage.getItem(seenKey);
+        if (seen !== APP_VERSION) btn.classList.add("new");
+
+        // Render changelog list
+        list.innerHTML = "";
+        CHANGELOG.forEach((entry) => {
+          const wrap = document.createElement("div");
+          const title = document.createElement("div");
+          title.className = "chg-title";
+          title.textContent = `${entry.version} – ${entry.date}`;
+          const ul = document.createElement("ul");
+          entry.items.forEach((t) => {
+            const li = document.createElement("li");
+            li.textContent = t;
+            ul.appendChild(li);
+          });
+          wrap.appendChild(title);
+          wrap.appendChild(ul);
+          list.appendChild(wrap);
+        });
+
+        const open = () => {
+          panel.hidden = false;
+          btn.classList.remove("new");
+          localStorage.setItem(seenKey, APP_VERSION);
+        };
+        const close = () => {
+          panel.hidden = true;
+        };
+
+        btn.addEventListener("click", () => (panel.hidden ? open() : close()));
+        closeBtn.addEventListener("click", close);
+      }
       (() => {
         "use strict";
 
@@ -1086,6 +1239,7 @@
           }
         }
 
+        initChangelogUI();
         new App();
       })();
     </script>
