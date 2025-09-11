@@ -295,6 +295,73 @@
         height: auto;
         min-height: 100%;
       }
+
+      /* Favorites panel */
+      .fav-toggle {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        z-index: 101;
+      }
+      .favorites-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 260px;
+        height: 100%;
+        background: var(--panel);
+        border-left: 1px solid #1e2233;
+        padding: 12px;
+        overflow-y: auto;
+        transform: translateX(100%);
+        transition: transform 0.2s;
+        z-index: 100;
+      }
+      .favorites-panel.open {
+        transform: translateX(0);
+      }
+      .fav-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .fav-group {
+        margin-bottom: 12px;
+      }
+      .fav-group-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+      }
+      .fav-items {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .fav-item {
+        position: relative;
+        border: 1px solid #2b3e6b;
+        background: #0f1220;
+        border-radius: 6px;
+        padding: 4px;
+      }
+      .fav-item canvas {
+        display: block;
+        max-width: 100%;
+        height: auto;
+      }
+      .fav-item .name {
+        margin-top: 4px;
+        font-size: 12px;
+      }
+      .fav-item .del-btn {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+      }
     </style>
   </head>
   <body>
@@ -418,14 +485,23 @@
             </div>
           </div>
           <div class="hint" style="margin-top: 8px">Combined output</div>
-          <canvas
-            id="rackCanvas"
-            width="0"
-            height="0"
-            aria-label="Combined output"
-          ></canvas>
-        </div>
+      <canvas
+        id="rackCanvas"
+        width="0"
+        height="0"
+        aria-label="Combined output"
+      ></canvas>
+    </div>
+  </div>
+</div>
+
+    <button id="favToggle" class="fav-toggle btn" type="button">⭐</button>
+    <div id="favoritesPanel" class="favorites-panel" aria-label="Favorites">
+      <div class="fav-head">
+        <strong>Favorites</strong>
+        <button id="addFavGroupBtn" type="button" class="btn">＋</button>
       </div>
+      <div id="favGroups"></div>
     </div>
 
     <script>
@@ -637,6 +713,18 @@
             this.render();
             this.onChange?.();
           }
+          getItemById(id) {
+            return this.items.find((it) => it.id === id) || null;
+          }
+          cloneCanvasById(id) {
+            const it = this.getItemById(id);
+            if (!it) return null;
+            const cnv = document.createElement("canvas");
+            cnv.width = it.w;
+            cnv.height = it.h;
+            cnv.getContext("2d").drawImage(it.canvas, 0, 0);
+            return cnv;
+          }
           move(fromIndex, toIndex) {
             if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
             const [it] = this.items.splice(fromIndex, 1);
@@ -708,6 +796,7 @@
               this.drag.fromIndex = Number(t.dataset.index);
               this.drag.srcEl = t;
               e.dataTransfer.effectAllowed = "move";
+              e.dataTransfer.setData("application/x-rack-item", t.dataset.id);
               // Align the drag image with the pointer to avoid jumpy ghost
               if (e.dataTransfer.setDragImage)
                 e.dataTransfer.setDragImage(t, e.offsetX, e.offsetY);
@@ -843,6 +932,262 @@
             return out;
           }
         }
+        class Favorites {
+          constructor(container, app) {
+            this.container = container;
+            this.app = app;
+            this.groups = [];
+            this.load();
+            this.render();
+          }
+          save() {
+            const data = this.groups.map((g) => ({
+              id: g.id,
+              name: g.name,
+              collapsed: g.collapsed || false,
+              items: g.items.map((it) => ({
+                id: it.id,
+                name: it.name,
+                w: it.w,
+                h: it.h,
+                data: it.canvas.toDataURL("image/png"),
+              })),
+            }));
+            localStorage.setItem("autocrop-favorites", JSON.stringify(data));
+          }
+          load() {
+            try {
+              const raw = JSON.parse(
+                localStorage.getItem("autocrop-favorites") || "[]"
+              );
+              this.groups = raw.map((g) => ({
+                id: g.id,
+                name: g.name,
+                collapsed: g.collapsed || false,
+                items: (g.items || []).map((it) => {
+                  const cnv = document.createElement("canvas");
+                  cnv.width = it.w;
+                  cnv.height = it.h;
+                  const img = new Image();
+                  img.src = it.data;
+                  img.onload = () =>
+                    cnv.getContext("2d").drawImage(img, 0, 0);
+                  return {
+                    id: it.id,
+                    name: it.name,
+                    w: it.w,
+                    h: it.h,
+                    canvas: cnv,
+                  };
+                }),
+              }));
+            } catch {
+              this.groups = [];
+            }
+          }
+          addGroup(name = "Group") {
+            const id = crypto.randomUUID?.() || String(Date.now() + Math.random());
+            this.groups.push({ id, name, collapsed: false, items: [] });
+            this.render();
+            this.save();
+          }
+          removeGroup(id) {
+            this.groups = this.groups.filter((g) => g.id !== id);
+            this.render();
+            this.save();
+          }
+          moveGroup(id, dir) {
+            const idx = this.groups.findIndex((g) => g.id === id);
+            const ni = idx + dir;
+            if (idx < 0 || ni < 0 || ni >= this.groups.length) return;
+            const [g] = this.groups.splice(idx, 1);
+            this.groups.splice(ni, 0, g);
+            this.render();
+            this.save();
+          }
+          renameGroup(id, name) {
+            const g = this.groups.find((x) => x.id === id);
+            if (!g) return;
+            g.name = name;
+            this.render();
+            this.save();
+          }
+          addItem(groupId, canvas, name = "") {
+            const g = this.groups.find((x) => x.id === groupId);
+            if (!g) return;
+            const cnv = document.createElement("canvas");
+            cnv.width = canvas.width;
+            cnv.height = canvas.height;
+            cnv.getContext("2d").drawImage(canvas, 0, 0);
+            const id = crypto.randomUUID?.() || String(Date.now() + Math.random());
+            g.items.push({ id, name, w: canvas.width, h: canvas.height, canvas: cnv });
+            this.render();
+            this.save();
+          }
+          removeItem(groupId, itemId) {
+            const g = this.groups.find((x) => x.id === groupId);
+            if (!g) return;
+            g.items = g.items.filter((it) => it.id !== itemId);
+            this.render();
+            this.save();
+          }
+          renameItem(groupId, itemId, name) {
+            const g = this.groups.find((x) => x.id === groupId);
+            if (!g) return;
+            const it = g.items.find((x) => x.id === itemId);
+            if (!it) return;
+            it.name = name;
+            this.render();
+            this.save();
+          }
+          cloneCanvas(groupId, itemId) {
+            const g = this.groups.find((x) => x.id === groupId);
+            if (!g) return null;
+            const it = g.items.find((x) => x.id === itemId);
+            if (!it) return null;
+            const cnv = document.createElement("canvas");
+            cnv.width = it.w;
+            cnv.height = it.h;
+            cnv.getContext("2d").drawImage(it.canvas, 0, 0);
+            return cnv;
+          }
+          render() {
+            this.container.innerHTML = "";
+            this.groups.forEach((g) => {
+              const groupEl = document.createElement("div");
+              groupEl.className = "fav-group";
+              groupEl.dataset.id = g.id;
+              const head = document.createElement("div");
+              head.className = "fav-group-header";
+              const title = document.createElement("span");
+              title.textContent = g.name;
+              title.addEventListener("click", () => {
+                const nm = prompt("Group name", g.name);
+                if (nm) this.renameGroup(g.id, nm);
+              });
+              const btns = document.createElement("div");
+              btns.style.display = "flex";
+              btns.style.gap = "4px";
+              const up = document.createElement("button");
+              up.textContent = "↑";
+              up.type = "button";
+              up.className = "btn";
+              up.addEventListener("click", () => this.moveGroup(g.id, -1));
+              const down = document.createElement("button");
+              down.textContent = "↓";
+              down.type = "button";
+              down.className = "btn";
+              down.addEventListener("click", () => this.moveGroup(g.id, 1));
+              const del = document.createElement("button");
+              del.textContent = "✖";
+              del.type = "button";
+              del.className = "btn";
+              del.addEventListener("click", () => {
+                if (confirm("Delete group?")) this.removeGroup(g.id);
+              });
+              btns.appendChild(up);
+              btns.appendChild(down);
+              btns.appendChild(del);
+              head.appendChild(title);
+              head.appendChild(btns);
+              head.addEventListener("dblclick", () => {
+                g.collapsed = !g.collapsed;
+                this.render();
+                this.save();
+              });
+              groupEl.appendChild(head);
+              const itemsEl = document.createElement("div");
+              itemsEl.className = "fav-items";
+              if (g.collapsed) itemsEl.style.display = "none";
+              itemsEl.addEventListener("dragover", (e) => {
+                e.preventDefault();
+              });
+              itemsEl.addEventListener("drop", (e) => this.handleDrop(e, g));
+              g.items.forEach((it) => {
+                const itemEl = document.createElement("div");
+                itemEl.className = "fav-item";
+                itemEl.draggable = true;
+                itemEl.dataset.groupId = g.id;
+                itemEl.dataset.id = it.id;
+                const thumb = document.createElement("canvas");
+                thumb.width = it.w;
+                thumb.height = it.h;
+                thumb.getContext("2d").drawImage(it.canvas, 0, 0, it.w, it.h);
+                itemEl.appendChild(thumb);
+                const name = document.createElement("div");
+                name.className = "name";
+                name.textContent = it.name || "unnamed";
+                name.addEventListener("click", () => {
+                  const nm = prompt("Item name", it.name || "");
+                  if (nm != null) this.renameItem(g.id, it.id, nm);
+                });
+                itemEl.appendChild(name);
+                const delBtn = document.createElement("button");
+                delBtn.className = "del-btn btn";
+                delBtn.type = "button";
+                delBtn.textContent = "✖";
+                delBtn.addEventListener("click", () =>
+                  this.removeItem(g.id, it.id)
+                );
+                itemEl.appendChild(delBtn);
+                itemEl.addEventListener("dragstart", (e) => {
+                  e.dataTransfer.effectAllowed = "copy";
+                  e.dataTransfer.setData(
+                    "application/x-fav-item",
+                    g.id + ":" + it.id
+                  );
+                });
+                itemsEl.appendChild(itemEl);
+              });
+              groupEl.appendChild(itemsEl);
+              this.container.appendChild(groupEl);
+            });
+          }
+          handleDrop(e, g) {
+            e.preventDefault();
+            const dt = e.dataTransfer;
+            const rackId = dt.getData("application/x-rack-item");
+            if (rackId) {
+              const cnv = this.app.rack.cloneCanvasById(rackId);
+              if (cnv) this.addItem(g.id, cnv, "");
+              return;
+            }
+            const favData = dt.getData("application/x-fav-item");
+            if (favData) {
+              const [gid, iid] = favData.split(":");
+              const cnv = this.cloneCanvas(gid, iid);
+              if (cnv) this.addItem(g.id, cnv, "");
+              return;
+            }
+            if (dt.files && dt.files.length) {
+              const file = Array.from(dt.files).find((f) =>
+                f.type.startsWith("image/")
+              );
+              if (!file) return;
+              const { tol, margin } = this.app.getCurrentCropParams();
+              createImageBitmap(file)
+                .then((bmp) =>
+                  this.app.cropBitmapToCanvas(bmp, tol, margin)
+                )
+                .then((c) => this.addItem(g.id, c, ""))
+                .catch((err) => console.error(err));
+              return;
+            }
+            const url = dt.getData("text/uri-list") || dt.getData("text/plain");
+            if (url && /^https?:\/\//i.test(url)) {
+              const { tol, margin } = this.app.getCurrentCropParams();
+              fetch(url.trim(), { mode: "cors", credentials: "omit" })
+                .then((res) => {
+                  if (!res.ok) throw new Error("HTTP " + res.status);
+                  return res.blob();
+                })
+                .then((blob) => createImageBitmap(blob))
+                .then((bmp) => this.app.cropBitmapToCanvas(bmp, tol, margin))
+                .then((c) => this.addItem(g.id, c, ""))
+                .catch((err) => console.error(err));
+            }
+          }
+        }
 
         // ---- App wiring ----
         class App {
@@ -861,6 +1206,10 @@
               rackCanvas: document.getElementById("rackCanvas"),
               copyRackBtn: document.getElementById("copyRackBtn"),
               downloadRackBtn: document.getElementById("downloadRackBtn"),
+              favToggle: document.getElementById("favToggle"),
+              favPanel: document.getElementById("favoritesPanel"),
+              addFavGroupBtn: document.getElementById("addFavGroupBtn"),
+              favGroups: document.getElementById("favGroups"),
             };
 
             this.sourceBitmap = null;
@@ -873,6 +1222,8 @@
               () => this.buildRack(),
               (e, index) => this.handleExternalInsert(e, index) // NEW
             );
+
+            this.favs = new Favorites(this.el.favGroups, this);
 
             this.bindEvents();
             this.bindGlobalPaste();
@@ -969,6 +1320,14 @@
             this.el.rackCanvas.addEventListener("click", () =>
               this.copyCanvas(this.el.rackCanvas)
             );
+
+            this.el.favToggle.addEventListener("click", () => {
+              this.el.favPanel.classList.toggle("open");
+            });
+            this.el.addFavGroupBtn.addEventListener("click", () => {
+              const nm = prompt("Group name", "Group");
+              this.favs.addGroup(nm || "Group");
+            });
           }
 
           bindGlobalPaste() {
@@ -1203,6 +1562,17 @@
               );
               this.updateRackButtonsState(); // enables copy/download if needed
             };
+
+            const favData = dt.getData("application/x-fav-item");
+            if (favData) {
+              const [gid, iid] = favData.split(":");
+              const cnv = this.favs.cloneCanvas(gid, iid);
+              if (cnv) {
+                finish(cnv);
+                this.setStatus("Inserted favorite.", "ok");
+              }
+              return;
+            }
 
             // Files first
             if (dt.files && dt.files.length) {
