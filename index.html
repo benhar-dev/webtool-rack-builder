@@ -291,8 +291,9 @@
         background: var(--accent);
         border-radius: 3px;
         margin: 0 2px;
-        height: 100px;
         align-self: stretch;
+        height: auto;
+        min-height: 100%;
       }
     </style>
   </head>
@@ -428,8 +429,13 @@
     </div>
 
     <script>
-      const APP_VERSION = "0.3.0";
+      const APP_VERSION = "0.3.1";
       const CHANGELOG = [
+        {
+          version: "0.3.1",
+          date: "2025-09-11",
+          items: ["Improved drag-and-drop marker reaction and visibility."],
+        },
         {
           version: "0.3.0",
           date: "2025-09-10",
@@ -712,7 +718,8 @@
               const dt = e.dataTransfer;
               const isExternal =
                 dt &&
-                (dt.types?.includes("Files") || dt.types?.includes("text/uri-list"));
+                (dt.types?.includes("Files") ||
+                  dt.types?.includes("text/uri-list"));
               dt.dropEffect = isExternal ? "copy" : "move";
 
               this.ensureMarker();
@@ -744,7 +751,8 @@
               const dt = e.dataTransfer;
               const isExternal =
                 dt &&
-                (dt.types?.includes("Files") || dt.types?.includes("text/uri-list"));
+                (dt.types?.includes("Files") ||
+                  dt.types?.includes("text/uri-list"));
               const to = this.computeTargetIndex(marker);
 
               if (isExternal) {
@@ -772,7 +780,8 @@
               this.drag.srcEl = null;
             });
             this.listEl.addEventListener("dragleave", (e) => {
-              if (e.relatedTarget && this.listEl.contains(e.relatedTarget)) return;
+              if (e.relatedTarget && this.listEl.contains(e.relatedTarget))
+                return;
               // keep marker; flicker-free
             });
           }
