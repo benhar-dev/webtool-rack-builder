@@ -295,6 +295,103 @@
         height: auto;
         min-height: 100%;
       }
+
+      /* Favorites panel */
+      .favorites {
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 260px;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 50;
+      }
+      .favorites.open {
+        transform: translateX(0);
+      }
+      .fav-toggle {
+        position: absolute;
+        left: -32px;
+        top: 16px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 8px 0 0 8px;
+      }
+      .fav-panel {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        background: var(--panel);
+        border-left: 1px solid #1e2233;
+      }
+      .fav-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px;
+        border-bottom: 1px solid #1e2233;
+      }
+      .fav-groups {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+      }
+      .fav-group {
+        border: 1px solid #252a41;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        background: #0e1222;
+      }
+      .fav-group > summary {
+        list-style: none;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        padding: 6px 8px;
+      }
+      .fav-group summary::-webkit-details-marker {
+        display: none;
+      }
+      .fav-group .g-actions button {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        margin-left: 4px;
+      }
+      .fav-items {
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .fav-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .fav-item canvas {
+        background: #0b0c0f;
+        border-radius: 4px;
+        max-width: 40px;
+        max-height: 40px;
+      }
+      .fav-item input {
+        flex: 1;
+        background: #0f1220;
+        color: var(--text);
+        border: 1px solid #252a41;
+        border-radius: 6px;
+        padding: 4px;
+        font-size: 12px;
+      }
+      .fav-item button {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+      }
     </style>
   </head>
   <body>
@@ -427,6 +524,16 @@
         </div>
       </div>
     </div>
+    <div id="favorites" class="favorites">
+      <button id="favToggle" class="fav-toggle" type="button">★</button>
+      <div class="fav-panel">
+        <div class="fav-head">
+          <strong>Favorites</strong>
+          <button id="addFavGroupBtn" type="button" title="Add section">+</button>
+        </div>
+        <div id="favGroups" class="fav-groups"></div>
+      </div>
+    </div>
 
     <script>
       const APP_VERSION = "0.3.1";
@@ -459,6 +566,9 @@
           ],
         },
       ];
+
+      // Currently dragged favorite item (for rack drop handling)
+      let draggedFavoriteItem = null;
 
       function initChangelogUI() {
         const btn = document.getElementById("versionBtn");
@@ -586,10 +696,11 @@
 
         // ---- Rack state + rendering ----
         class Rack {
-          constructor(listEl, onChange, onExternalInsert) {
+          constructor(listEl, onChange, onExternalInsert, onFavoriteInsert) {
             this.listEl = listEl;
             this.onChange = onChange;
             this.onExternalInsert = onExternalInsert; // NEW
+            this.onFavoriteInsert = onFavoriteInsert;
             this.items = [];
             this.normH = 0; // track target height for scaling
             this.drag = { fromIndex: -1, markerEl: null, srcEl: null };
@@ -720,7 +831,8 @@
                 dt &&
                 (dt.types?.includes("Files") ||
                   dt.types?.includes("text/uri-list"));
-              dt.dropEffect = isExternal ? "copy" : "move";
+              const isFavorite = draggedFavoriteItem != null;
+              dt.dropEffect = isExternal || isFavorite ? "copy" : "move";
 
               this.ensureMarker();
               const x = e.clientX;
@@ -753,10 +865,16 @@
                 dt &&
                 (dt.types?.includes("Files") ||
                   dt.types?.includes("text/uri-list"));
+              const isFavorite = draggedFavoriteItem != null;
               const to = this.computeTargetIndex(marker);
 
-              if (isExternal) {
-                this.onExternalInsert?.(e, to); // NEW: let App handle decoding/cropping
+              if (isExternal || isFavorite) {
+                if (isFavorite) {
+                  this.onFavoriteInsert?.(draggedFavoriteItem, to);
+                  draggedFavoriteItem = null;
+                } else {
+                  this.onExternalInsert?.(e, to); // NEW: let App handle decoding/cropping
+                }
                 this.clearMarker();
                 this.drag.fromIndex = -1;
                 this.drag.srcEl = null;
@@ -844,6 +962,243 @@
           }
         }
 
+        // ---- Favorites management ----
+        class Favorites {
+          constructor(app) {
+            this.app = app;
+            this.el = {
+              root: document.getElementById("favorites"),
+              toggle: document.getElementById("favToggle"),
+              groups: document.getElementById("favGroups"),
+              addGroupBtn: document.getElementById("addFavGroupBtn"),
+            };
+            this.groups = [];
+            this.load();
+            this.render();
+            this.installEvents();
+          }
+
+          load() {
+            try {
+              this.groups =
+                JSON.parse(localStorage.getItem("favorites-data")) || [];
+            } catch {
+              this.groups = [];
+            }
+            if (!Array.isArray(this.groups)) this.groups = [];
+            if (!this.groups.length) {
+              this.groups.push({
+                id: crypto.randomUUID?.() || String(Date.now()),
+                name: "Default",
+                items: [],
+                open: true,
+              });
+              this.save();
+            }
+          }
+          save() {
+            localStorage.setItem("favorites-data", JSON.stringify(this.groups));
+          }
+
+          installEvents() {
+            this.el.toggle.addEventListener("click", () =>
+              this.el.root.classList.toggle("open")
+            );
+            this.el.addGroupBtn.addEventListener("click", () => this.addGroup());
+          }
+
+          addGroup(name = "Section") {
+            this.groups.push({
+              id: crypto.randomUUID?.() || String(Date.now() + Math.random()),
+              name,
+              items: [],
+              open: true,
+            });
+            this.save();
+            this.render();
+          }
+          removeGroup(id) {
+            this.groups = this.groups.filter((g) => g.id !== id);
+            this.save();
+            this.render();
+          }
+          moveGroup(index, delta) {
+            const ni = index + delta;
+            if (ni < 0 || ni >= this.groups.length) return;
+            const [g] = this.groups.splice(index, 1);
+            this.groups.splice(ni, 0, g);
+            this.save();
+            this.render();
+          }
+          getGroup(id) {
+            return this.groups.find((g) => g.id === id);
+          }
+          addCanvas(groupId, canvas, name = "Favorite") {
+            const group = this.getGroup(groupId);
+            if (!group) return;
+            const data = canvas.toDataURL("image/png");
+            const item = {
+              id: crypto.randomUUID?.() || String(Date.now() + Math.random()),
+              name,
+              data,
+            };
+            group.items.push(item);
+            this.save();
+            this.render();
+          }
+          addFromRack(groupId, rackItem) {
+            const dup = document.createElement("canvas");
+            dup.width = rackItem.w;
+            dup.height = rackItem.h;
+            dup.getContext("2d").drawImage(rackItem.canvas, 0, 0);
+            this.addCanvas(groupId, dup, rackItem.name || "Favorite");
+          }
+          removeItem(groupId, itemId) {
+            const g = this.getGroup(groupId);
+            if (!g) return;
+            g.items = g.items.filter((it) => it.id !== itemId);
+            this.save();
+            this.render();
+          }
+          render() {
+            const wrap = this.el.groups;
+            wrap.innerHTML = "";
+            this.groups.forEach((group, idx) => {
+              const det = document.createElement("details");
+              det.className = "fav-group";
+              det.dataset.id = group.id;
+              if (group.open) det.open = true;
+              det.addEventListener("toggle", () => {
+                group.open = det.open;
+                this.save();
+              });
+
+              const sum = document.createElement("summary");
+              const nameSpan = document.createElement("span");
+              nameSpan.textContent = group.name;
+              sum.appendChild(nameSpan);
+              const actions = document.createElement("span");
+              actions.className = "g-actions";
+              const ren = document.createElement("button");
+              ren.type = "button";
+              ren.textContent = "✎";
+              ren.title = "Rename";
+              ren.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const n = prompt("Section name", group.name);
+                if (n) {
+                  group.name = n.trim();
+                  nameSpan.textContent = group.name;
+                  this.save();
+                }
+              });
+              const up = document.createElement("button");
+              up.type = "button";
+              up.textContent = "↑";
+              up.title = "Move up";
+              up.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.moveGroup(idx, -1);
+              });
+              const down = document.createElement("button");
+              down.type = "button";
+              down.textContent = "↓";
+              down.title = "Move down";
+              down.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.moveGroup(idx, 1);
+              });
+              const del = document.createElement("button");
+              del.type = "button";
+              del.textContent = "✖";
+              del.title = "Delete";
+              del.addEventListener("click", (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (confirm("Delete section?")) this.removeGroup(group.id);
+              });
+              actions.append(ren, up, down, del);
+              sum.appendChild(actions);
+              det.appendChild(sum);
+
+              const itemsEl = document.createElement("div");
+              itemsEl.className = "fav-items";
+              itemsEl.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
+              });
+              itemsEl.addEventListener("drop", (e) => {
+                e.preventDefault();
+                if (draggedFavoriteItem) {
+                  draggedFavoriteItem = null;
+                  return;
+                }
+                if (this.app.rack.drag.fromIndex >= 0) {
+                  const it = this.app.rack.items[this.app.rack.drag.fromIndex];
+                  this.addFromRack(group.id, it);
+                  this.app.setStatus("Saved to favorites.", "ok");
+                } else {
+                  this.app.handleExternalInsertToFavorites(e, group.id);
+                }
+              });
+
+              group.items.forEach((item) => {
+                itemsEl.appendChild(this.createItemEl(group, item));
+              });
+              det.appendChild(itemsEl);
+              wrap.appendChild(det);
+            });
+          }
+
+          createItemEl(group, item) {
+            const el = document.createElement("div");
+            el.className = "fav-item";
+            el.draggable = true;
+            el.dataset.id = item.id;
+
+            const canvas = document.createElement("canvas");
+            const img = new Image();
+            img.src = item.data;
+            img.onload = () => {
+              canvas.width = img.width;
+              canvas.height = img.height;
+              canvas.getContext("2d").drawImage(img, 0, 0);
+            };
+            el.appendChild(canvas);
+
+            const input = document.createElement("input");
+            input.type = "text";
+            input.value = item.name || "";
+            input.addEventListener("change", () => {
+              item.name = input.value;
+              this.save();
+            });
+            el.appendChild(input);
+
+            const del = document.createElement("button");
+            del.type = "button";
+            del.textContent = "✖";
+            del.title = "Remove";
+            del.addEventListener("click", () => {
+              this.removeItem(group.id, item.id);
+            });
+            el.appendChild(del);
+
+            el.addEventListener("dragstart", (e) => {
+              e.dataTransfer.effectAllowed = "copy";
+              draggedFavoriteItem = item;
+            });
+            el.addEventListener("dragend", () => {
+              draggedFavoriteItem = null;
+            });
+
+            return el;
+          }
+        }
+
         // ---- App wiring ----
         class App {
           constructor() {
@@ -871,8 +1226,11 @@
             this.rack = new Rack(
               this.el.rack,
               () => this.buildRack(),
-              (e, index) => this.handleExternalInsert(e, index) // NEW
+              (e, index) => this.handleExternalInsert(e, index),
+              (fav, index) => this.handleFavoriteInsert(fav, index)
             );
+
+            this.favorites = new Favorites(this);
 
             this.bindEvents();
             this.bindGlobalPaste();
@@ -1250,6 +1608,77 @@
             }
 
             this.setStatus("Unsupported drop payload.", "error");
+          }
+
+          async handleExternalInsertToFavorites(e, groupId) {
+            const dt = e.dataTransfer;
+            const { tol, margin } = this.getCurrentCropParams();
+            const finish = (canvas) => {
+              this.favorites.addCanvas(groupId, canvas);
+              this.setStatus("Added image to favorites.", "ok");
+            };
+
+            if (dt.files && dt.files.length) {
+              const file = Array.from(dt.files).find((f) =>
+                f.type.startsWith("image/")
+              );
+              if (!file) {
+                this.setStatus("Dropped file is not an image.", "error");
+                return;
+              }
+              try {
+                const bmp = await createImageBitmap(file);
+                const cnv = await this.cropBitmapToCanvas(bmp, tol, margin);
+                finish(cnv);
+              } catch (err) {
+                this.setStatus("Failed to decode/crop dropped file.", "error");
+                console.error(err);
+              }
+              return;
+            }
+
+            const url = dt.getData("text/uri-list") || dt.getData("text/plain");
+            if (url && (/^https?:\/\//i.test(url) || url.startsWith("data:"))) {
+              try {
+                const res = await fetch(url.trim(), {
+                  mode: "cors",
+                  credentials: "omit",
+                });
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                const blob = await res.blob();
+                const bmp = await createImageBitmap(blob);
+                const cnv = await this.cropBitmapToCanvas(bmp, tol, margin);
+                finish(cnv);
+                this.setStatus("Inserted image from URL.", "ok");
+              } catch (err) {
+                this.setStatus(
+                  "Could not read pixels from URL (CORS). Paste or save-and-drag.",
+                  "error"
+                );
+                console.error(err);
+              }
+              return;
+            }
+
+            this.setStatus("Unsupported drop payload.", "error");
+          }
+
+          async handleFavoriteInsert(item, index) {
+            try {
+              const img = new Image();
+              img.src = item.data;
+              await img.decode();
+              const cnv = document.createElement("canvas");
+              cnv.width = img.naturalWidth || img.width;
+              cnv.height = img.naturalHeight || img.height;
+              cnv.getContext("2d").drawImage(img, 0, 0, cnv.width, cnv.height);
+              this.rack.insertAt(cnv, Math.max(0, Math.min(index, this.rack.items.length)));
+              this.updateRackButtonsState();
+              this.setStatus("Inserted favorite at position.", "ok");
+            } catch (err) {
+              console.error(err);
+              this.setStatus("Failed to insert favorite.", "error");
+            }
           }
         }
 
