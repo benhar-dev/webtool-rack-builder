@@ -291,8 +291,9 @@
         background: var(--accent);
         border-radius: 3px;
         margin: 0 2px;
-        height: 100px;
         align-self: stretch;
+        height: auto;
+        min-height: 100%;
       }
     </style>
   </head>
@@ -428,8 +429,13 @@
     </div>
 
     <script>
-      const APP_VERSION = "0.3.0";
+      const APP_VERSION = "0.3.1";
       const CHANGELOG = [
+        {
+          version: "0.3.1",
+          date: "2025-09-11",
+          items: ["Improved drag-and-drop marker reaction and visibility."],
+        },
         {
           version: "0.3.0",
           date: "2025-09-10",
@@ -586,7 +592,7 @@
             this.onExternalInsert = onExternalInsert; // NEW
             this.items = [];
             this.normH = 0; // track target height for scaling
-            this.drag = { fromIndex: -1, markerEl: null };
+            this.drag = { fromIndex: -1, markerEl: null, srcEl: null };
             this.installDnD();
           }
 
@@ -696,17 +702,15 @@
           }
 
           installDnD() {
-            const DEAD = 12;
-            let lastTarget = null,
-              lastSide = null;
-
             this.listEl.addEventListener("dragstart", (e) => {
               const t = e.target.closest?.(".tile");
               if (!t) return;
               this.drag.fromIndex = Number(t.dataset.index);
+              this.drag.srcEl = t;
               e.dataTransfer.effectAllowed = "move";
-              lastTarget = null;
-              lastSide = null;
+              // Align the drag image with the pointer to avoid jumpy ghost
+              if (e.dataTransfer.setDragImage)
+                e.dataTransfer.setDragImage(t, e.offsetX, e.offsetY);
             });
 
             this.listEl.addEventListener("dragover", (e) => {
@@ -718,41 +722,25 @@
                   dt.types?.includes("text/uri-list"));
               dt.dropEffect = isExternal ? "copy" : "move";
 
-              const over =
-                (e.target.closest && e.target.closest(".tile")) || null;
               this.ensureMarker();
-
-              if (!over) {
-                if (
-                  this.drag.markerEl.parentNode !== this.listEl ||
-                  this.listEl.lastElementChild !== this.drag.markerEl
-                ) {
-                  this.listEl.appendChild(this.drag.markerEl);
-                  lastTarget = null;
-                  lastSide = "end";
-                }
-                return;
-              }
-
-              const rect = over.getBoundingClientRect();
-              const mid = rect.left + rect.width / 2;
               const x = e.clientX;
-              let side = lastSide;
 
-              if (lastTarget !== over) side = x < mid ? "left" : "right";
-              else {
-                if (side === "left" && x > mid + DEAD) side = "right";
-                else if (side === "right" && x < mid - DEAD) side = "left";
-                else if (!side) side = x < mid ? "left" : "right";
+              const tiles = Array.from(
+                this.listEl.querySelectorAll(".tile")
+              ).filter((el) => el !== this.drag.srcEl);
+
+              let placed = false;
+              for (const tile of tiles) {
+                const rect = tile.getBoundingClientRect();
+                if (x < rect.left + rect.width / 2) {
+                  this.listEl.insertBefore(this.drag.markerEl, tile);
+                  placed = true;
+                  break;
+                }
               }
-
-              if (lastTarget === over && lastSide === side) return;
-              if (side === "left")
-                this.listEl.insertBefore(this.drag.markerEl, over);
-              else
-                this.listEl.insertBefore(this.drag.markerEl, over.nextSibling);
-              lastTarget = over;
-              lastSide = side;
+              if (!placed) {
+                this.listEl.appendChild(this.drag.markerEl);
+              }
             });
 
             this.listEl.addEventListener("drop", (e) => {
@@ -771,6 +759,7 @@
                 this.onExternalInsert?.(e, to); // NEW: let App handle decoding/cropping
                 this.clearMarker();
                 this.drag.fromIndex = -1;
+                this.drag.srcEl = null;
                 return;
               }
 
@@ -782,10 +771,13 @@
 
               this.clearMarker();
               this.drag.fromIndex = -1;
+              this.drag.srcEl = null;
             });
 
             this.listEl.addEventListener("dragend", () => {
               this.clearMarker();
+              this.drag.fromIndex = -1;
+              this.drag.srcEl = null;
             });
             this.listEl.addEventListener("dragleave", (e) => {
               if (e.relatedTarget && this.listEl.contains(e.relatedTarget))
