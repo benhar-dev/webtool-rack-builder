@@ -5,6 +5,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Rack Builder</title>
+    <!-- Google tag (gtag.js) -->
+    <script
+      async
+      src="https://www.googletagmanager.com/gtag/js?id=G-MJRPL6DMKZ"
+    ></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("consent", "default", {
+        ad_storage: "denied",
+        analytics_storage: "denied",
+        functionality_storage: "denied",
+        personalization_storage: "denied",
+        security_storage: "granted",
+      });
+    </script>
     <style>
       :root {
         --bg: #0b0c0f;
@@ -107,6 +126,73 @@
         border: 1px solid #1e2233;
         border-radius: 12px;
         padding: 14px;
+      }
+      .legal {
+        margin-top: 24px;
+        display: grid;
+        gap: 14px;
+      }
+      @media (min-width: 720px) {
+        .legal {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .legal-card h2 {
+        margin: 0 0 6px;
+        font-size: 16px;
+      }
+      .legal-card p {
+        margin: 6px 0;
+        line-height: 1.5;
+        color: #cfd6ee;
+      }
+      .legal-card ul {
+        margin: 6px 0 0 20px;
+        padding: 0;
+        color: #cfd6ee;
+      }
+      .legal-card a,
+      .legal-card button.link-btn {
+        color: var(--accent);
+        text-decoration: none;
+        background: none;
+        border: none;
+        font: inherit;
+        padding: 0;
+        display: inline;
+        cursor: pointer;
+      }
+      .legal-card a:hover,
+      .legal-card button.link-btn:hover {
+        text-decoration: underline;
+      }
+      .cookie-banner {
+        position: fixed;
+        bottom: 18px;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: min(440px, calc(100% - 32px));
+        background: #141622;
+        border: 1px solid #2b3e6b;
+        border-radius: 12px;
+        padding: 18px;
+        box-shadow: 0 18px 32px rgba(5, 6, 12, 0.65);
+        z-index: 1000;
+      }
+      .cookie-banner p {
+        margin: 0 0 12px;
+        line-height: 1.5;
+        color: #cfd6ee;
+      }
+      .cookie-banner .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .cookie-banner button.secondary {
+        background: transparent;
+        border-color: #2b3e6b;
       }
       .hint {
         color: var(--muted);
@@ -426,9 +512,140 @@
           ></canvas>
         </div>
       </div>
+      <footer class="legal" aria-label="Site policies">
+        <div class="card legal-card" id="privacy">
+          <h2>Privacy &amp; Cookies</h2>
+          <p>
+            Rack Builder uses Google Analytics to understand anonymized usage
+            patterns so we can improve the experience. Analytics cookies are
+            only enabled after you provide consent.
+          </p>
+          <ul>
+            <li>Collected data is limited to usage metrics and device info.</li>
+            <li>IP addresses are anonymized before analytics processing.</li>
+            <li>
+              You can revisit your choice at any time via the
+              <button id="manageCookiesBtn" class="link-btn" type="button">
+                Cookie Preferences
+              </button>
+              link.
+            </li>
+          </ul>
+        </div>
+        <div class="card legal-card" id="terms">
+          <h2>Terms of Use</h2>
+          <p>
+            By using Rack Builder you agree to use uploaded content you own or
+            have permission to share. We provide the tool without warranty and
+            cannot be held liable for data loss or any indirect damages.
+          </p>
+          <p>
+            Generated assets remain yours. Please retain backups of important
+            uploads and avoid sharing confidential information through the
+            tool.
+          </p>
+          <p>
+            For questions about privacy or these terms, contact us at
+            <a href="mailto:support@example.com">support@example.com</a>.
+          </p>
+        </div>
+      </footer>
+    </div>
+
+    <div
+      id="cookieBanner"
+      class="cookie-banner"
+      role="dialog"
+      aria-live="polite"
+      aria-label="Cookie consent"
+      tabindex="-1"
+      hidden
+    >
+      <p>
+        We use cookies to measure how Rack Builder is used so we can improve the
+        tool. You can change your choice later in the Cookie Preferences link in
+        our privacy section.
+      </p>
+      <div class="actions">
+        <button id="declineCookiesBtn" class="secondary" type="button">
+          Decline
+        </button>
+        <button id="acceptCookiesBtn" type="button">Accept</button>
+      </div>
     </div>
 
     <script>
+      const GA_MEASUREMENT_ID = "G-MJRPL6DMKZ";
+      const COOKIE_CONSENT_KEY = "rackbuilder-cookie-consent";
+      const cookieBanner = document.getElementById("cookieBanner");
+      const acceptCookiesBtn = document.getElementById("acceptCookiesBtn");
+      const declineCookiesBtn = document.getElementById("declineCookiesBtn");
+      const manageCookiesBtn = document.getElementById("manageCookiesBtn");
+
+      const setLocalStorage = (key, value) => {
+        try {
+          localStorage.setItem(key, value);
+        } catch (err) {
+          console.warn("Unable to persist cookie consent", err);
+        }
+      };
+
+      const getLocalStorage = (key) => {
+        try {
+          return localStorage.getItem(key);
+        } catch (err) {
+          console.warn("Unable to read cookie consent", err);
+          return null;
+        }
+      };
+
+      const applyConsent = (state) => {
+        if (state === "accepted") {
+          gtag("consent", "update", {
+            ad_storage: "denied",
+            analytics_storage: "granted",
+            functionality_storage: "granted",
+            security_storage: "granted",
+          });
+          gtag("config", GA_MEASUREMENT_ID, { anonymize_ip: true });
+        } else {
+          gtag("consent", "update", {
+            ad_storage: "denied",
+            analytics_storage: "denied",
+            functionality_storage: "denied",
+          });
+        }
+      };
+
+      const storedConsent = getLocalStorage(COOKIE_CONSENT_KEY);
+      if (storedConsent === "accepted") {
+        applyConsent("accepted");
+      } else {
+        if (storedConsent === "declined") {
+          applyConsent("declined");
+        } else {
+          cookieBanner?.removeAttribute("hidden");
+          cookieBanner?.focus();
+        }
+      }
+
+      acceptCookiesBtn?.addEventListener("click", () => {
+        applyConsent("accepted");
+        setLocalStorage(COOKIE_CONSENT_KEY, "accepted");
+        cookieBanner?.setAttribute("hidden", "");
+      });
+
+      declineCookiesBtn?.addEventListener("click", () => {
+        applyConsent("declined");
+        setLocalStorage(COOKIE_CONSENT_KEY, "declined");
+        cookieBanner?.setAttribute("hidden", "");
+      });
+
+      manageCookiesBtn?.addEventListener("click", () => {
+        cookieBanner?.removeAttribute("hidden");
+        cookieBanner?.focus();
+      });
+
       const APP_VERSION = "0.3.1";
       const CHANGELOG = [
         {
