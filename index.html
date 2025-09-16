@@ -127,44 +127,79 @@
         border-radius: 12px;
         padding: 14px;
       }
-      .legal {
-        margin-top: 24px;
-        display: grid;
-        gap: 14px;
-      }
-      @media (min-width: 720px) {
-        .legal {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-      }
-      .legal-card h2 {
-        margin: 0 0 6px;
-        font-size: 16px;
-      }
-      .legal-card p {
-        margin: 6px 0;
-        line-height: 1.5;
-        color: #cfd6ee;
-      }
-      .legal-card ul {
-        margin: 6px 0 0 20px;
-        padding: 0;
-        color: #cfd6ee;
-      }
-      .legal-card a,
-      .legal-card button.link-btn {
-        color: var(--accent);
-        text-decoration: none;
+      .link-btn {
         background: none;
         border: none;
+        color: var(--accent);
+        cursor: pointer;
         font: inherit;
         padding: 0;
-        display: inline;
-        cursor: pointer;
+        text-decoration: none;
       }
-      .legal-card a:hover,
-      .legal-card button.link-btn:hover {
+      .link-btn:hover,
+      .link-btn:focus-visible {
         text-decoration: underline;
+      }
+      .link-btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .footer-links {
+        margin: 32px 0 12px;
+        display: flex;
+        justify-content: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .footer-links .sep {
+        color: #2f3651;
+      }
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        background: rgba(7, 9, 15, 0.82);
+        backdrop-filter: blur(4px);
+        z-index: 1100;
+      }
+      .modal {
+        width: min(520px, 100%);
+        max-height: min(90vh, 640px);
+        background: #141622;
+        border: 1px solid #2b3e6b;
+        border-radius: 16px;
+        box-shadow: 0 24px 48px rgba(5, 6, 12, 0.55);
+        padding: 22px;
+        overflow-y: auto;
+      }
+      .modal-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .modal h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+      .modal-body p {
+        margin: 8px 0;
+        line-height: 1.6;
+        color: #cfd6ee;
+      }
+      .modal-body ul {
+        margin: 8px 0 0 20px;
+        padding: 0;
+        color: #cfd6ee;
+      }
+      .modal-body li {
+        margin: 6px 0;
       }
       .cookie-banner {
         position: fixed;
@@ -512,9 +547,46 @@
           ></canvas>
         </div>
       </div>
-      <footer class="legal" aria-label="Site policies">
-        <div class="card legal-card" id="privacy">
-          <h2>Privacy &amp; Cookies</h2>
+      <footer class="footer-links" aria-label="Site policies">
+        <button
+          type="button"
+          class="link-btn"
+          data-modal-target="privacyModal"
+        >
+          Privacy &amp; Cookies
+        </button>
+        <span class="sep" aria-hidden="true">•</span>
+        <button
+          type="button"
+          class="link-btn"
+          data-modal-target="termsModal"
+        >
+          Terms of Use
+        </button>
+      </footer>
+    </div>
+
+    <div
+      id="privacyModal"
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="privacyModalTitle"
+      hidden
+    >
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="privacyModalTitle">Privacy &amp; Cookies</h2>
+          <button
+            type="button"
+            class="close-btn"
+            data-close-modal
+            aria-label="Close Privacy &amp; Cookies details"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
           <p>
             Rack Builder uses Google Analytics to understand anonymized usage
             patterns so we can improve the experience. Analytics cookies are
@@ -532,10 +604,32 @@
             </li>
           </ul>
         </div>
-        <div class="card legal-card" id="terms">
-          <h2>Terms of Use</h2>
+      </div>
+    </div>
+
+    <div
+      id="termsModal"
+      class="modal-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="termsModalTitle"
+      hidden
+    >
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="termsModalTitle">Terms of Use</h2>
+          <button
+            type="button"
+            class="close-btn"
+            data-close-modal
+            aria-label="Close Terms of Use"
+          >
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
           <p>
-            By using Rack Builder you agree to use uploaded content you own or
+            By using Rack Builder you agree to only upload content you own or
             have permission to share. We provide the tool without warranty and
             cannot be held liable for data loss or any indirect damages.
           </p>
@@ -546,10 +640,12 @@
           </p>
           <p>
             For questions about privacy or these terms, contact us at
-            <a href="mailto:support@example.com">support@example.com</a>.
+            <a class="link-btn" href="mailto:support@example.com"
+              >support@example.com</a
+            >.
           </p>
         </div>
-      </footer>
+      </div>
     </div>
 
     <div
@@ -563,8 +659,8 @@
     >
       <p>
         We use cookies to measure how Rack Builder is used so we can improve the
-        tool. You can change your choice later in the Cookie Preferences link in
-        our privacy section.
+        tool. You can change your choice later via Cookie Preferences in the
+        Privacy &amp; Cookies link at the bottom of this page.
       </p>
       <div class="actions">
         <button id="declineCookiesBtn" class="secondary" type="button">
@@ -642,8 +738,69 @@
       });
 
       manageCookiesBtn?.addEventListener("click", () => {
+        closeActiveModal?.();
         cookieBanner?.removeAttribute("hidden");
         cookieBanner?.focus();
+      });
+
+      const modalTriggers = document.querySelectorAll("[data-modal-target]");
+      const modalCloseButtons = document.querySelectorAll("[data-close-modal]");
+      const modalBackdrops = document.querySelectorAll(".modal-backdrop");
+      const focusableSelectors =
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      let activeModal = null;
+      let modalOpener = null;
+
+      const closeActiveModal = () => {
+        if (!activeModal) return;
+        activeModal.setAttribute("hidden", "");
+        activeModal = null;
+        document.body.style.removeProperty("overflow");
+        if (modalOpener) {
+          modalOpener.focus();
+          modalOpener = null;
+        }
+      };
+
+      const openModal = (modal, opener) => {
+        if (!modal) return;
+        if (activeModal) closeActiveModal();
+        modalOpener = opener || document.activeElement;
+        modal.removeAttribute("hidden");
+        document.body.style.overflow = "hidden";
+        activeModal = modal;
+        const focusTarget =
+          modal.querySelector("[data-close-modal]") ||
+          modal.querySelector(focusableSelectors);
+        focusTarget?.focus();
+      };
+
+      modalTriggers.forEach((trigger) => {
+        trigger.addEventListener("click", () => {
+          const modalId = trigger.dataset.modalTarget;
+          if (!modalId) return;
+          const modal = document.getElementById(modalId);
+          openModal(modal, trigger);
+        });
+      });
+
+      modalCloseButtons.forEach((btn) =>
+        btn.addEventListener("click", () => closeActiveModal())
+      );
+
+      modalBackdrops.forEach((modal) => {
+        modal.addEventListener("click", (event) => {
+          if (event.target === modal) {
+            closeActiveModal();
+          }
+        });
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && activeModal) {
+          event.preventDefault();
+          closeActiveModal();
+        }
       });
 
       const APP_VERSION = "0.3.1";
