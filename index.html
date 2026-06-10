@@ -382,7 +382,7 @@
                   id="rackSpacing"
                   type="number"
                   value="0"
-                  min="0"
+                  min="-200"
                   max="200"
                   step="1"
               /></label>
@@ -429,8 +429,17 @@
     </div>
 
     <script>
-      const APP_VERSION = "0.3.1";
+      const APP_VERSION = "0.4.0";
       const CHANGELOG = [
+        {
+          version: "0.4.0",
+          date: "2026-06-10",
+          items: [
+            "Spacing can now be negative to overlap tiles so terminals look connected.",
+            "White backgrounds are removed automatically (uses White tolerance). Interior white areas such as labels are preserved.",
+            "When tiles overlap, the right tile is drawn on top of the left one.",
+          ],
+        },
         {
           version: "0.3.1",
           date: "2025-09-11",
@@ -563,6 +572,67 @@
               h: maxY - minY + 1,
               tainted: false,
             };
+          }
+
+          // Makes the white background transparent by flood-filling from the
+          // image borders. White areas inside the artwork (e.g. terminal
+          // labels) are not connected to the border, so they are kept.
+          static keyOutWhiteBackground(src, whiteTol = 10) {
+            const w = src.width,
+              h = src.height;
+            const out = document.createElement("canvas");
+            out.width = w;
+            out.height = h;
+            const g = out.getContext("2d", { willReadFrequently: true });
+            g.drawImage(src, 0, 0);
+
+            let img;
+            try {
+              img = g.getImageData(0, 0, w, h);
+            } catch {
+              return out; // tainted source; leave opaque
+            }
+            const data = img.data;
+
+            const isBackground = (p) => {
+              const i = p * 4;
+              if (data[i + 3] < 10) return true;
+              return (
+                255 - data[i] <= whiteTol &&
+                255 - data[i + 1] <= whiteTol &&
+                255 - data[i + 2] <= whiteTol
+              );
+            };
+
+            const visited = new Uint8Array(w * h);
+            const stack = [];
+            const seed = (x, y) => {
+              const p = y * w + x;
+              if (!visited[p] && isBackground(p)) {
+                visited[p] = 1;
+                stack.push(p);
+              }
+            };
+            for (let x = 0; x < w; x++) {
+              seed(x, 0);
+              seed(x, h - 1);
+            }
+            for (let y = 0; y < h; y++) {
+              seed(0, y);
+              seed(w - 1, y);
+            }
+            while (stack.length) {
+              const p = stack.pop();
+              const x = p % w,
+                y = (p / w) | 0;
+              data[p * 4 + 3] = 0;
+              if (x > 0) seed(x - 1, y);
+              if (x < w - 1) seed(x + 1, y);
+              if (y > 0) seed(x, y - 1);
+              if (y < h - 1) seed(x, y + 1);
+            }
+            g.putImageData(img, 0, 0);
+            return out;
           }
 
           static cropWithMargin(src, box, margin = 5) {
@@ -810,7 +880,22 @@
             const idx = Array.from(this.listEl.children).indexOf(marker);
             return idx < 0 ? this.items.length : idx;
           }
-          buildCombined({ spacing = 0, bg = "white", valign = "middle" } = {}) {
+          keyedCanvas(it, whiteTol) {
+            if (!it.keyed || it.keyed.tol !== whiteTol) {
+              it.keyed = {
+                tol: whiteTol,
+                canvas: AutoCropper.keyOutWhiteBackground(it.canvas, whiteTol),
+              };
+            }
+            return it.keyed.canvas;
+          }
+
+          buildCombined({
+            spacing = 0,
+            bg = "white",
+            valign = "middle",
+            whiteTol = 10,
+          } = {}) {
             if (!this.items.length) return null;
             const targetH = this.normH || 0;
             const totalW =
@@ -820,7 +905,7 @@
               ) +
               spacing * (this.items.length - 1);
             const out = document.createElement("canvas");
-            out.width = totalW;
+            out.width = Math.max(1, totalW);
             out.height = targetH;
             const g = out.getContext("2d");
             if (bg !== "transparent") {
@@ -830,6 +915,8 @@
               g.clearRect(0, 0, out.width, out.height);
             }
             let x = 0;
+            // Tiles are drawn left to right, so with negative spacing each
+            // tile overlaps on top of the one to its left.
             for (const it of this.items) {
               const w = Math.round((it.w * targetH) / it.h);
               let y = 0;
@@ -837,7 +924,7 @@
               if (valign === "middle") y = Math.round((targetH - targetH) / 2);
               else if (valign === "bottom" || valign === "baseline")
                 y = targetH - targetH;
-              g.drawImage(it.canvas, x, y, w, targetH);
+              g.drawImage(this.keyedCanvas(it, whiteTol), x, y, w, targetH);
               x += w + spacing;
             }
             return out;
@@ -933,10 +1020,14 @@
             });
             this.el.tolInput.addEventListener("change", () => {
               this.saveSettings();
-              this.setStatus(
-                "Tolerance updated. New images will use it.",
-                "ok"
-              );
+              if (this.rack.items.length) {
+                this.buildRack();
+              } else {
+                this.setStatus(
+                  "Tolerance updated. New images will use it.",
+                  "ok"
+                );
+              }
             });
 
             this.el.rackSpacing.addEventListener("change", () => {
@@ -1069,19 +1160,30 @@
           buildRack() {
             const spacing = this.parseBoundedInt(
               this.el.rackSpacing.value,
-              0,
+              -200,
               200,
               0
             );
             const bg = this.el.rackBg.value || "transparent";
             const valign = this.el.rackValign.value || "middle";
+            const whiteTol = this.parseBoundedInt(
+              this.el.tolInput.value,
+              0,
+              60,
+              10
+            );
             const scalePct = this.parseBoundedInt(
               this.el.rackScale.value,
               1,
               400,
               100
             );
-            const combined = this.rack.buildCombined({ spacing, bg, valign });
+            const combined = this.rack.buildCombined({
+              spacing,
+              bg,
+              valign,
+              whiteTol,
+            });
             if (!combined) {
               this.el.rackCanvas.width = 0;
               this.el.rackCanvas.height = 0;
