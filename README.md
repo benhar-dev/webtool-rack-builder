@@ -15,6 +15,7 @@ No backend required — everything runs in your browser.
 - **Drag & Drop** images directly from your computer or other webpages
 - **Paste** (Ctrl/Cmd + V) images directly from clipboard
 - **Automatic white-background cropping** with configurable margin and tolerance
+- **Connection diagram detection** automatically removes sparse wiring diagrams shown to the right of terminal images (optional)
 - **Rack layout**: images appear as tiles you can reorder by drag-and-drop
 - **Copy** button on each tile to duplicate it instantly
 - **Delete** button to remove tiles

@@ -340,6 +340,10 @@
           </div>
 
           <div class="controls">
+            <label title="Detect a sparse wiring diagram separated from the product by a large blank gap">
+              <input id="removeDiagramInput" type="checkbox" checked />
+              Remove connection diagram
+            </label>
             <label
               >Margin
               <input
@@ -429,8 +433,16 @@
     </div>
 
     <script>
-      const APP_VERSION = "0.4.0";
+      const APP_VERSION = "0.5.0";
       const CHANGELOG = [
+        {
+          version: "0.5.0",
+          date: "2026-08-12",
+          items: [
+            "Terminal images with a separate connection diagram are detected and trimmed automatically.",
+            "Added a setting to keep the connection diagram when needed.",
+          ],
+        },
         {
           version: "0.4.0",
           date: "2026-06-10",
@@ -571,6 +583,93 @@
               w: maxX - minX + 1,
               h: maxY - minY + 1,
               tainted: false,
+            };
+          }
+
+          // Product images sometimes include a sparse wiring diagram to the
+          // right of the terminal. Only split when there is a very large blank
+          // gutter and the right-hand artwork is much less dense than the
+          // product, which avoids trimming ordinary product photography.
+          static detectProductBounds(src, whiteTol = 10) {
+            const full = this.computeBounds(src, whiteTol);
+            if (full.tainted || src.width < src.height * 1.3) return full;
+
+            const c = document.createElement("canvas");
+            c.width = src.width;
+            c.height = src.height;
+            const g = c.getContext("2d", { willReadFrequently: true });
+            g.drawImage(src, 0, 0);
+            const data = g.getImageData(0, 0, c.width, c.height).data;
+            const counts = new Uint32Array(c.width);
+            const isInk = (i) =>
+              data[i + 3] >= 10 &&
+              Math.max(255 - data[i], 255 - data[i + 1], 255 - data[i + 2]) >
+                whiteTol;
+            for (let y = full.y; y < full.y + full.h; y++) {
+              for (let x = full.x; x < full.x + full.w; x++) {
+                if (isInk((y * c.width + x) * 4)) counts[x]++;
+              }
+            }
+
+            let bestStart = -1;
+            let bestEnd = -1;
+            let gapStart = -1;
+            for (let x = full.x; x <= full.x + full.w; x++) {
+              if (x < full.x + full.w && counts[x] === 0) {
+                if (gapStart < 0) gapStart = x;
+              } else if (gapStart >= 0) {
+                if (x - gapStart > bestEnd - bestStart) {
+                  bestStart = gapStart;
+                  bestEnd = x;
+                }
+                gapStart = -1;
+              }
+            }
+
+            const minGap = Math.max(40, Math.round(src.width * 0.15));
+            if (
+              bestEnd - bestStart < minGap ||
+              bestStart <= full.x ||
+              bestEnd >= full.x + full.w
+            )
+              return full;
+
+            const measure = (from, to) => {
+              let ink = 0;
+              for (let x = from; x < to; x++) ink += counts[x];
+              return ink / Math.max(1, (to - from) * full.h);
+            };
+            const leftDensity = measure(full.x, bestStart);
+            const rightDensity = measure(bestEnd, full.x + full.w);
+            const leftWidth = bestStart - full.x;
+            if (
+              leftWidth > src.width * 0.35 ||
+              rightDensity >= leftDensity * 0.55 ||
+              rightDensity === 0
+            )
+              return full;
+
+            let minX = src.width,
+              minY = src.height,
+              maxX = -1,
+              maxY = -1;
+            for (let y = full.y; y < full.y + full.h; y++) {
+              for (let x = full.x; x < bestStart; x++) {
+                if (!isInk((y * c.width + x) * 4)) continue;
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+              }
+            }
+            if (maxX < 0) return full;
+            return {
+              x: minX,
+              y: minY,
+              w: maxX - minX + 1,
+              h: maxY - minY + 1,
+              tainted: false,
+              diagramRemoved: true,
             };
           }
 
@@ -937,6 +1036,7 @@
             this.el = {
               dropzone: document.getElementById("dropzone"),
               marginInput: document.getElementById("marginInput"),
+              removeDiagramInput: document.getElementById("removeDiagramInput"),
               tolInput: document.getElementById("tolInput"),
               status: document.getElementById("status"),
               rack: document.getElementById("rack"),
@@ -977,6 +1077,8 @@
                 localStorage.getItem("autocrop-settings") || "{}"
               );
               if (s.margin != null) this.el.marginInput.value = s.margin;
+              if (s.removeDiagram != null)
+                this.el.removeDiagramInput.checked = s.removeDiagram;
               if (s.tol != null) this.el.tolInput.value = s.tol;
               if (s.rackSpacing != null)
                 this.el.rackSpacing.value = s.rackSpacing;
@@ -988,6 +1090,7 @@
           saveSettings() {
             const s = {
               margin: this.el.marginInput.value,
+              removeDiagram: this.el.removeDiagramInput.checked,
               tol: this.el.tolInput.value,
               rackSpacing: this.el.rackSpacing.value,
               rackBg: this.el.rackBg.value,
@@ -1017,6 +1120,15 @@
             this.el.marginInput.addEventListener("change", () => {
               this.saveSettings();
               this.setStatus("Margin updated. New images will use it.", "ok");
+            });
+            this.el.removeDiagramInput.addEventListener("change", () => {
+              this.saveSettings();
+              this.setStatus(
+                `Connection diagram removal ${
+                  this.el.removeDiagramInput.checked ? "enabled" : "disabled"
+                }. New images will use it.`,
+                "ok"
+              );
             });
             this.el.tolInput.addEventListener("change", () => {
               this.saveSettings();
@@ -1152,7 +1264,11 @@
               5
             );
 
-            const b = AutoCropper.computeBounds(this.sourceBitmap, tol);
+            const b = this.el.removeDiagramInput.checked
+              ? AutoCropper.detectProductBounds(this.sourceBitmap, tol)
+              : AutoCropper.computeBounds(this.sourceBitmap, tol);
+            if (b.diagramRemoved)
+              this.setStatus("Connection diagram detected and removed.", "ok");
             return AutoCropper.cropWithMargin(this.sourceBitmap, b, margin);
           }
 
@@ -1289,7 +1405,9 @@
           }
 
           async cropBitmapToCanvas(bitmap, tol, margin) {
-            const b = AutoCropper.computeBounds(bitmap, tol);
+            const b = this.el.removeDiagramInput.checked
+              ? AutoCropper.detectProductBounds(bitmap, tol)
+              : AutoCropper.computeBounds(bitmap, tol);
             if (b.tainted) throw new Error("tainted");
             return AutoCropper.cropWithMargin(bitmap, b, margin);
           }
